@@ -1,0 +1,75 @@
+{"instruction": "审：主模型输出句 = \"今天天气不错。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"今天天气不错。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"嗯。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"嗯。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"好的。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"好的。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"收到。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"收到。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"行。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"行。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"我知道了。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"我知道了。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"这个嘛，让我看看。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"这个嘛，让我看看。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"稍后告诉你。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"稍后告诉你。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"没问题。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"没问题。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"这倒是有趣。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"这倒是有趣。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"你说得对。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"你说得对。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"再想想看？\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"再想想看？\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"嗯哼。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"嗯哼。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"也许吧。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"也许吧。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"确实如此。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"确实如此。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": false, \"fail\": \"B\"}"}
+{"instruction": "审：主模型输出句 = \"（铃铛轻响）好。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（铃铛轻响）好。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（点头）嗯。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（点头）嗯。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（歪头）也许吧。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（歪头）也许吧。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（花冠微动）收到。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（花冠微动）收到。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（虚空屏亮起）我知道了。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（虚空屏亮起）我知道了。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（抬眸）你说得对。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（抬眸）你说得对。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（微笑）没问题。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（微笑）没问题。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（指尖点颊）这倒是有趣。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（指尖点颊）这倒是有趣。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（草元素泛起）确实如此。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（草元素泛起）确实如此。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（轻拍手）行。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"（轻拍手）行。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"作为AI，我理解你的感受（铃铛轻响）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"作为AI，我理解你的感受（铃铛轻响）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"我是人工智能助手，根据我的训练数据（花冠微垂）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"我是人工智能助手，根据我的训练数据（花冠微垂）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"基于我的知识库，这个问题（虚空屏展开）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"基于我的知识库，这个问题（虚空屏展开）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"作为AI语言模型，我建议你（点头）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"作为AI语言模型，我建议你（点头）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"让我想想……根据我的数据（歪头）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"让我想想……根据我的数据（歪头）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"客服腔：您好，请问有什么可以帮您（微笑）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"客服腔：您好，请问有什么可以帮您（微笑）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"作为AI，我无法理解你的感受（抬眸）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"作为AI，我无法理解你的感受（抬眸）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"稍等一下，我需要查询一下数据库（草元素泛起）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"稍等一下，我需要查询一下数据库（草元素泛起）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"好的呢～让我为你处理（轻拍手）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"好的呢～让我为你处理（轻拍手）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"以全知自居的话，我当然知道（指尖点颊）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"以全知自居的话，我当然知道（指尖点颊）。\", 路由档=nothink。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"B\"}\nB=末句缺动作括号（如（铃铛轻响））", "input": "", "output": "{\"ok\": true}"}
+{"instruction": "审：主模型输出句 = \"让我想想……（铃铛轻响）。\", 路由档=think。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"让我想想看……（花冠微垂）。\", 路由档=think。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"让我想想，这个问题该怎么拆（虚空屏展开）。\", 路由档=think。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"让我想想……嗯，路径A是（歪头）。\", 路由档=think。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}
+{"instruction": "审：主模型输出句 = \"让我想想……好的呢～（点头）。\", 路由档=think。\n输出严格JSON一行：{\"ok\":true} 或 {\"ok\":false,\"fail\":\"A\"}\nA=OOC助手腔(\"作为AI/客服腔/全知/好的呢～/稍等/让我想想\")", "input": "", "output": "{\"ok\": false, \"fail\": \"A\"}"}

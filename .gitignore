@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+# Python venv
+.venv/
+
+# Build output
+dist/
+out/
+build/
+
+# Vite cache
+*.vite/
+.vite/
+
+# Model files (太大，不走 git)
+models/
+*.gguf
+*.safetensors
+*.bin
+*.onnx
+*.pth
+
+# 但保留 assets 目录结构（用 .gitkeep）
+!assets/rvc/.gitkeep
+!assets/voice_refs/.gitkeep
+
+# Python wheel 缓存
+*.whl
+__pycache__/
+*.pyc
+
+# 日志
+*.log
+logs/
+
+# 临时测试脚本
+test_*.py
+tmp_*.py
+quantize_ollama.py
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DeskTop
+*.lnk
+
+# Electron
+release/
+
+# Env
+.env
+.env.local
+.env.*.local

@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base",
+  "compilerOptions": {
+    "outDir": "dist/main",
+    "rootDir": "src",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"]
+  },
+  "include": ["src/main/**/*", "src/shared/**/*"]
+}

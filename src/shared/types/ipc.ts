@@ -1,0 +1,89 @@
+import { z } from 'zod';
+
+// IPC 6 通道枚举 —— preload 和 main 都引用这份，禁止各写各的
+export enum IpcChannel {
+  AGENT_CHAT = 'agent:chat',
+  AGENT_MODEL_DELTA = 'agent:model-delta',
+  AGENT_TOOL_CALL = 'agent:tool-call',
+  AGENT_STATE_CHANGE = 'agent:state-change',
+  LIVE2D_ACTION = 'live2d:action',
+  TTS_CHUNK = 'tts:chunk',
+}
+
+// ---------- agent:chat（用户发消息 → main） ----------
+export const agentChatSchema = z.object({
+  message: z.string().min(1),
+  mode: z.enum(['casual', 'think', 'plan']).default('casual'),
+  sessionId: z.string().optional(),
+});
+export type AgentChatPayload = z.infer<typeof agentChatSchema>;
+
+// ---------- agent:model-delta（main → 渲染层，流式token） ----------
+export const agentModelDeltaSchema = z.object({
+  delta: z.string(),
+  finishReason: z.enum(['stop', 'action_tag', 'tool_call', 'length']).optional(),
+  sessionId: z.string(),
+  timestamp: z.number(),
+});
+export type AgentModelDeltaPayload = z.infer<typeof agentModelDeltaSchema>;
+
+// ---------- agent:tool-call（工具调用双向） ----------
+export const agentToolCallSchema = z.object({
+  toolName: z.string(),
+  parameters: z.record(z.unknown()),
+  callId: z.string(),
+  sessionId: z.string(),
+});
+export type AgentToolCallPayload = z.infer<typeof agentToolCallSchema>;
+
+export const agentToolResultSchema = z.object({
+  callId: z.string(),
+  result: z.unknown(),
+  error: z.string().optional(),
+});
+export type AgentToolResultPayload = z.infer<typeof agentToolResultSchema>;
+
+// ---------- agent:state-change（状态变更推送） ----------
+export const agentStateChangeSchema = z.object({
+  state: z.enum(['idle', 'thinking', 'tool_calling', 'speaking', 'error']),
+  reason: z.string().optional(),
+  game: z.object({
+    game: z.enum(['GI', 'SR', 'none']).optional(),
+    fps_avg: z.number().optional(),
+    fps_low: z.number().optional(),
+    gpu_temp: z.number().optional(),
+    gpu_load: z.number().optional(),
+  }).optional(),
+  timestamp: z.number(),
+});
+export type AgentStateChangePayload = z.infer<typeof agentStateChangeSchema>;
+
+// ---------- live2d:action（动作 tag 推送） ----------
+export const live2dActionSchema = z.object({
+  actionTag: z.string(),
+  expression: z.string().optional(),
+  priority: z.number().default(0),
+});
+export type Live2dActionPayload = z.infer<typeof live2dActionSchema>;
+
+// ---------- tts:chunk（语音 chunk 推送） ----------
+export const ttsChunkSchema = z.object({
+  chunkIndex: z.number(),
+  totalChunks: z.number(),
+  audioBase64: z.string(),
+  visemeData: z.array(z.number()).optional(),
+  voiceType: z.string().optional(),
+});
+export type TtsChunkPayload = z.infer<typeof ttsChunkSchema>;
+
+// ---------- 全量校验映射（main ipc/validate.ts 用） ----------
+export const ipcSchemas = {
+  [IpcChannel.AGENT_CHAT]: agentChatSchema,
+  [IpcChannel.AGENT_MODEL_DELTA]: agentModelDeltaSchema,
+  [IpcChannel.AGENT_TOOL_CALL]: agentToolCallSchema,
+  [IpcChannel.AGENT_STATE_CHANGE]: agentStateChangeSchema,
+  [IpcChannel.LIVE2D_ACTION]: live2dActionSchema,
+  [IpcChannel.TTS_CHUNK]: ttsChunkSchema,
+} as const;
+
+export type IpcSchemas = typeof ipcSchemas;
