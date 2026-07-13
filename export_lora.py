@@ -10,8 +10,8 @@ from peft import PeftModel
 # ── 配置 ──────────────────────────────────────────────────────
 
 MODEL_PATH = "E:/LLaMA-Factory/models/models/qwen--Qwen2.5-1.5B-Instruct/snapshots/master"
-ADAPTER_PATH = "E:/LLaMA-Factory/saves/qwen1.5b-review-lora-v2/final"
-EXPORT_DIR = "E:/Nahida-agent/models/qwen1.5b-review-lora-v2"
+ADAPTER_PATH = "E:/LLaMA-Factory/saves/T-v3-1677-r32/final"  # v3 训练目录（已按规范重命名）
+EXPORT_DIR = "E:/Nahida agent/models/qwen1.5b-review-lora-v3"  # v3 导出路径（项目内，沙箱允许）
 
 # ── 主流程 ────────────────────────────────────────────────────
 

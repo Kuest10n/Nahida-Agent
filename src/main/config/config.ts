@@ -96,7 +96,7 @@ const DEFAULT_OLLAMA_TIMEOUT = 30_000;
 const DEFAULT_MODEL_LOCAL = 'qwen3-8b-nahida';
 const DEFAULT_MODEL_STANDARD = 'deepseek-v4pro';
 const DEFAULT_MODEL_FLASH = 'deepseek-v4pro-flash';
-const DEFAULT_MODEL_REVIEW = 'qwen2.5-1.5b-nahida';
+const DEFAULT_MODEL_REVIEW = 'qwen2.5-1.5b-review-lora-v3';
 
 const DEFAULT_SESSION_MAX_HISTORY = 10;
 const DEFAULT_SESSION_TTL = 30;

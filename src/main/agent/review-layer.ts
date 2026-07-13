@@ -1,7 +1,7 @@
 /**
  * 四审层（Review Layer）—— v2 真模型版
  *
- * 模型：qwen2.5-1.5b-review-lora-v2（Qwen2.5-1.5B + LoRA rank32, F16）
+ * 模型：qwen2.5-1.5b-review-lora-v3（Qwen2.5-1.5B + LoRA rank32, F16, 1677条数据）
  * 调用方式：ollama /api/chat + keep_alive 5m 保活
  * 实测延迟：热调用 300-460ms/条（F16），G25 70ms 目标需 Phase 2 换引擎
  * 量化测试：q4 比 F16 快 20-30% 但 C 维 tag 漂移（悲伤→担忧），弃用 q4 保精度

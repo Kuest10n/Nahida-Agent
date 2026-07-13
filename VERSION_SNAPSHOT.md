@@ -91,11 +91,57 @@
 
 ---
 
+# VERSION_SNAPSHOT v0.7.3
+
+> 快照时间：2026-07-13
+> 代码版本：v0.7.3（v3 训练完成 → 导出 → ollama create → 代码切模型）
+> 状态：历史快照
+
+---
+
+## 代码
+
+- commit: `v0.7.3`（git tag）
+- package.json: `0.7.3`
+- TS 编译：3/3 零错
+- 变更：
+  - `config.ts`: `DEFAULT_MODEL_REVIEW` → `qwen2.5-1.5b-review-lora-v3`
+  - `review-layer.ts`: 注释更新 v3
+  - `export_lora.py`: 路径改为 v3（项目内 `models/qwen1.5b-review-lora-v3`）
+  - `modelfiles/qwen2.5-1.5b-review-lora-v3.Modelfile`: FROM 路径对齐项目内
+
+## 训练
+
+### 四审层
+- 审查模型：T-v3-1677-r32（1677 条，rank32，loss 0.48→0.1168）
+- 基模：Qwen/Qwen2.5-1.5B-Instruct
+- 训练目录：`E:/LLaMA-Factory/saves/T-v3-1677-r32/`
+- 导出：`E:/Nahida agent/models/qwen1.5b-review-lora-v3/`（HF 格式，3.1GB）
+- ollama 名：`qwen2.5-1.5b-review-lora-v3`
+- Modelfile：`modelfiles/qwen2.5-1.5b-review-lora-v3.Modelfile`
+- 审查策略：混合策略（v3 全模型 + A/B 规则 + D 规则），待 G25 验证
+
+### 废弃
+- `qwen2.5-1.5b-review-lora-v2`：继续观察 1 个月 → `.deprecated`
+- `qwen2.5-1.5b-review-lora-v2-q4`：评估是否保留
+
+## 资源
+
+同 v0.7.0。
+
+## 已知 / 待办
+
+- [ ] A 维 smoke test（"作为AI…" → fail:A）
+- [ ] G25 延迟打点（v3 F16 实际延迟）
+- [ ] v3 训完后的 T-v2 saves 归档到 `docs/train-logs/`
+
+---
+
 # VERSION_SNAPSHOT v0.8.2
 
 > 快照时间：2026-07-12
 > 代码版本：v0.8.2（记忆三分 + Rand_error + cycleLog 四段）
-> 状态：当前版本
+> 状态：历史快照（v0.7.3 之后合并的架构改进）
 
 ---
 
