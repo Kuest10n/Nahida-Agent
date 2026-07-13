@@ -122,8 +122,8 @@
 - 审查策略：混合策略（v3 全模型 + A/B 规则 + D 规则），待 G25 验证
 
 ### 废弃
-- `qwen2.5-1.5b-review-lora-v2`：继续观察 1 个月 → `.deprecated`
-- `qwen2.5-1.5b-review-lora-v2-q4`：评估是否保留
+- `qwen2.5-1.5b-review-lora-v2`：已标记 `.deprecated`，观察期至 2026-08-12（1 个月后删除）
+- `qwen2.5-1.5b-review-lora-v2-q4`：评估是否保留，暂不标记
 
 ## 资源
 
