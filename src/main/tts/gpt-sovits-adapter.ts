@@ -69,7 +69,7 @@ function getRefAudio(emotion: NahidaEmotion): { audio: string; text: string } {
 export class GptSoVitsAdapter implements TtsAdapter {
   readonly name = 'gpt-sovits';
   /** 训练期间禁用，v3 完成后启用 */
-  readonly enabled = false;
+  readonly enabled = true;
 
   /** GPT-SoVITS API 地址（默认 http://localhost:9880） */
   private get apiUrl(): string {
