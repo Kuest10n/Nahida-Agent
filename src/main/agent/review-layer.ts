@@ -253,6 +253,8 @@ async function modelReview(
   opts?: ReviewOpts,
 ): Promise<DimResult> {
   if (modelFailCount >= FAIL_THRESHOLD) {
+    // 熔断触发后允许重试，避免永久锁定
+    modelFailCount = 0;
     throw new Error('model review circuit breaker triggered');
   }
 

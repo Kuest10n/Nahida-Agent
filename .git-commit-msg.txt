@@ -1,9 +1,12 @@
-feat: 实现 IPC rand-error 专用通道
+fix: 安全修复 + 测试覆盖补充
 
-架构债清理：
-- 新增 IPCChannel.RAND_ERROR_REPORT 通道定义（src/shared/types/ipc.ts）
-- handlers.ts 将 console.warn 改为 IPC 推送渲染层
-- preload 白名单添加 RAND_ERROR_REPORT 监听权限
-- 渲染层可接收自主进化报告并展示
+安全修复：
+- SSRF 防护增强：修复 IPv6 回环/ULA/link-local、0.0.0.0/8、CGNAT 100.64.0.0/10 绕过漏洞（builtin.ts isSafeUrl）
+- 熔断机制修复：review-layer.ts 熔断触发后允许重试，避免永久锁定
+
+测试覆盖补充：
+- builtin-ssrf.test.ts：10 个 SSRF 防护边界测试用例（IPv4/IPv6 私网、回环、ULA、link-local、CGNAT、0.0.0.0/8）
+- session-store.test.ts：并发竞态测试（10 并发 × 100 消息，验证无丢失无重复）
+- guardrails.test.ts：3 个 JSON 修复边界测试用例（混合引号、嵌套对象、数组尾逗号）
 
 TS 编译：0 错误

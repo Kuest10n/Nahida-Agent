@@ -82,6 +82,44 @@ async function runTests(): Promise<void> {
     console.error(e);
   }
 
+  // S1: 并发竞态测试
+  total++;
+  try {
+    resetSessionStore();
+    const concurrentSessionId = 'concurrent-test-session';
+    const concurrentTasks = 10;
+    const messagesPerTask = 100;
+    const expectedTotal = concurrentTasks * messagesPerTask;
+
+    // 启动 10 个并发任务，每个 append 100 条消息
+    const promises: Promise<void>[] = [];
+    for (let i = 0; i < concurrentTasks; i++) {
+      const taskPromise = (async () => {
+        for (let j = 0; j < messagesPerTask; j++) {
+          appendMessage(concurrentSessionId, 'user', `Message ${i}-${j}`);
+        }
+      })();
+      promises.push(taskPromise);
+    }
+
+    // 等待所有并发任务完成
+    await Promise.all(promises);
+
+    // 验证最终消息数
+    const messages = getSessionMessages(concurrentSessionId);
+    assert(messages.length === expectedTotal, `并发写入后消息数量应为 ${expectedTotal}，实际为 ${messages.length}`);
+    
+    // 验证无重复消息（通过检查消息内容的唯一性）
+    const uniqueContents = new Set(messages.map(m => m.content));
+    assert(uniqueContents.size === expectedTotal, `应无重复消息，唯一消息数应为 ${expectedTotal}，实际为 ${uniqueContents.size}`);
+
+    passed++;
+    logTest('并发写入完整性 → 10 个并发任务各 append 100 条消息，最终消息数 = 1000，无丢失无重复', true);
+  } catch (e) {
+    logTest('并发写入完整性 → 10 个并发任务各 append 100 条消息，最终消息数 = 1000，无丢失无重复', false);
+    console.error(e);
+  }
+
   console.log(`\n=== 测试完成：${passed}/${total} 通过 ===\n`);
 }
 

@@ -113,15 +113,54 @@ function isSafeUrl(url: string): boolean {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return false;
     const hostname = parsed.hostname.toLowerCase();
-    if (hostname.startsWith('localhost') || hostname.startsWith('127.')) return false;
-    if (hostname.startsWith('10.')) return false;
-    if (hostname.startsWith('172.')) {
-      const parts = hostname.split('.');
+
+    // 解 IPv6 方括号
+    const cleanHost = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+
+    // IPv6 回环 [::1]
+    if (cleanHost === '::1' || cleanHost === '0:0:0:0:0:0:0:1') return false;
+
+    // IPv6 ULA [fc00::]/7 (fc00:: - fdff::)
+    if (cleanHost.startsWith('fc') || cleanHost.startsWith('fd')) return false;
+
+    // IPv6 link-local [fe80::]/10
+    if (cleanHost.startsWith('fe8') || cleanHost.startsWith('fe9') ||
+        cleanHost.startsWith('fea') || cleanHost.startsWith('feb')) return false;
+
+    // IPv4 回环 127.0.0.0/8
+    if (cleanHost.startsWith('127.')) return false;
+
+    // IPv4 私网 10.0.0.0/8
+    if (cleanHost.startsWith('10.')) return false;
+
+    // IPv4 私网 172.16.0.0/12
+    if (cleanHost.startsWith('172.')) {
+      const parts = cleanHost.split('.');
       const secondOctet = parseInt(parts[1] ?? '0', 10);
       if (secondOctet >= 16 && secondOctet <= 31) return false;
     }
-    if (hostname.startsWith('192.168.')) return false;
-    if (hostname === '169.254.169.254') return false;
+
+    // IPv4 私网 192.168.0.0/16
+    if (cleanHost.startsWith('192.168.')) return false;
+
+    // IPv4 链路本地 169.254.0.0/16 (含 AWS 元数据 169.254.169.254)
+    if (cleanHost.startsWith('169.254.')) return false;
+
+    // IPv4 CGNAT 100.64.0.0/10
+    if (cleanHost.startsWith('100.')) {
+      const parts = cleanHost.split('.');
+      const secondOctet = parseInt(parts[1] ?? '0', 10);
+      if (secondOctet >= 64 && secondOctet <= 127) return false;
+    }
+
+    // 0.0.0.0/8 (Windows 上解析为本机)
+    if (cleanHost.startsWith('0.')) return false;
+
+    // localhost
+    if (cleanHost === 'localhost' || cleanHost.startsWith('localhost.')) return false;
+
     return true;
   } catch {
     return false;

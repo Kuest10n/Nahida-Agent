@@ -152,6 +152,49 @@ async function runTests(): Promise<void> {
     console.error(e);
   }
 
+  // S2: 混合错误修复边界测试
+  total++;
+  try {
+    const result = ToolGuardrails.repairJson('{"a": \'it\'s "test"\', "b": [1,2,3],}');
+    assert(result !== null, '混合错误修复后不为 null');
+    const parsed = JSON.parse(result!);
+    assert(parsed.a === 'it\'s "test"', '单引号、双引号、尾逗号混合场景正确修复');
+    assert(Array.isArray(parsed.b) && parsed.b.length === 3, '数组值正确');
+    passed++;
+    logTest('{"a": \'it\'s "test"\', "b": [1,2,3],} → 单引号、双引号、尾逗号混合修复', true);
+  } catch (e) {
+    logTest('{"a": \'it\'s "test"\', "b": [1,2,3],} → 单引号、双引号、尾逗号混合修复', false);
+    console.error(e);
+  }
+
+  total++;
+  try {
+    const result = ToolGuardrails.repairJson('{query: \'search "term"\', limit: 10,}');
+    assert(result !== null, '缺引号键 + 单引号 + 尾逗号修复后不为 null');
+    const parsed = JSON.parse(result!);
+    assert(parsed.query === 'search "term"', '缺引号键被补全且值正确');
+    assert(parsed.limit === 10, '数值类型正确');
+    passed++;
+    logTest('{query: \'search "term"\', limit: 10,} → 缺引号键 + 单引号 + 尾逗号混合修复', true);
+  } catch (e) {
+    logTest('{query: \'search "term"\', limit: 10,} → 缺引号键 + 单引号 + 尾逗号混合修复', false);
+    console.error(e);
+  }
+
+  total++;
+  try {
+    const result = ToolGuardrails.repairJson('{"nested": {"key": \'value\'}, "array": [1, 2,],}');
+    assert(result !== null, '嵌套对象 + 数组尾逗号修复后不为 null');
+    const parsed = JSON.parse(result!);
+    assert(parsed.nested.key === 'value', '嵌套对象值正确');
+    assert(Array.isArray(parsed.array) && parsed.array.length === 2, '数组值正确');
+    passed++;
+    logTest('{"nested": {"key": \'value\'}, "array": [1, 2,],} → 嵌套对象 + 数组尾逗号修复', true);
+  } catch (e) {
+    logTest('{"nested": {"key": \'value\'}, "array": [1, 2,],} → 嵌套对象 + 数组尾逗号修复', false);
+    console.error(e);
+  }
+
   console.log(`\n=== 测试完成：${passed}/${total} 通过 ===\n`);
 }
 

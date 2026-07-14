@@ -223,3 +223,11 @@
 - [x] cycleLog 持久化到 session.json（v0.8.3 已完成）
 - [x] git 已初始化（待首 commit）
 - [x] LICENSE + README 已创建
+
+### 安全修复（2026-07-15）
+- [x] SSRF 防护增强：修复 IPv6 回环/ULA/link-local、0.0.0.0/8、CGNAT 100.64.0.0/10 绕过漏洞
+- [x] 熔断机制修复：review-layer.ts 熔断触发后允许重试，避免永久锁定
+- [x] 测试覆盖补充：
+  - builtin-ssrf.test.ts：10 个 SSRF 防护边界测试用例
+  - session-store.test.ts：并发竞态测试（10 并发 × 100 消息）
+  - guardrails.test.ts：3 个 JSON 修复边界测试用例
