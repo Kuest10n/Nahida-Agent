@@ -74,6 +74,7 @@
 - [x] `modelfiles/qwen2.5-1.5b-review.Modelfile`（review v1）→ 已删
 - [x] `modelfiles/qwen2.5-1.5b-review-lora-v2-q4.Modelfile`（v2 q4 变体）→ 已删
 - [x] `data/lora/nahida_training_500.jsonl` / `nahida_training_2000.jsonl`（v1 旧数据）→ 已删
+- [x] T-v2 saves 归档 → `docs/train-logs/T-v2-1602-r32/TRAIN_LOG.md`
 
 ### 待完成
 - [x] v3 训完 → 导出 GGUF → ollama create → review-layer 切 v3（v0.7.3 已完成）
