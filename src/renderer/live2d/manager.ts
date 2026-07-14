@@ -66,7 +66,18 @@ export async function initLive2D(options: Live2DInitOptions): Promise<void> {
     antialias: true,
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
+    // @ts-expect-error pixi-live2d-display 需要 events 属性，但 PixiJS 7 类型定义未包含
+    events: true,
   });
+
+  // 兼容 pixi-live2d-display 的 deprecated interaction API
+  // PixiJS 7.x 使用 renderer.events，而 pixi-live2d-display 期望一个有 .on()/.off() 方法的对象
+  if (!app.renderer.plugins.interaction) {
+    (app.renderer.plugins as any).interaction = {
+      on: () => {},
+      off: () => {},
+    };
+  }
 
   // 2. 有模型 URL → 动态加载 cubism4 模块 + Cubism 4.0 模型
   if (modelUrl) {
@@ -80,11 +91,14 @@ export async function initLive2D(options: Live2DInitOptions): Promise<void> {
       model = await Live2DModel.from(modelUrl);
       app.stage.addChild(model as unknown as PIXI.DisplayObject);
 
-      // 初始位置：居中
+      // 禁用自动交互（避免 pixi-live2d-display 与 PixiJS 7.x 的交互兼容性问题）
+      (model as any)._autoInteract = false;
+
+      // 初始位置：居中偏上，确保全身可见（腿部向下延伸较多）
       model.anchor.set(0.5, 0.5);
       model.scale.set(scale);
       model.x = app.screen.width / 2;
-      model.y = app.screen.height / 2;
+      model.y = app.screen.height * 0.42;
 
       // 初始 Idle 动作
       playMotion('Idle', 0, 1);
@@ -200,7 +214,34 @@ function handleResize(): void {
   model.y = app.screen.height / 2;
 }
 
-// ── 手动调试接口（挂 window 上方便控制台测试） ────────────────
+export function hitTestModel(domX: number, domY: number): boolean {
+  if (!model || !modelReady || !app) return false;
+
+  try {
+    // DOM 坐标 → PIXI 内部坐标（适配 devicePixelRatio）
+    const canvas = app.view as HTMLCanvasElement;
+    const scaleX = canvas.width / canvas.clientWidth;
+    const scaleY = canvas.height / canvas.clientHeight;
+    const x = domX * scaleX;
+    const y = domY * scaleY;
+
+    const hitAreas = (model as any).hitTest(x, y);
+    return Array.isArray(hitAreas) && hitAreas.length > 0;
+  } catch {
+    // hitTest 不可用或坐标异常时，回退到几何区域判断
+    try {
+      const bounds = model.getLocalBounds();
+      const canvas = app.view as HTMLCanvasElement;
+      const scaleX = canvas.width / canvas.clientWidth;
+      const scaleY = canvas.height / canvas.clientHeight;
+      const x = domX * scaleX;
+      const y = domY * scaleY;
+      return bounds.contains(x, y);
+    } catch {
+      return false;
+    }
+  }
+}
 
 (window as any).playNahidaAction = (tag: string) => playAction({ tag });
 (window as any).nahidaLive2D = {

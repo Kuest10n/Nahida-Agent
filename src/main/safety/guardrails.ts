@@ -229,8 +229,8 @@ export class ToolGuardrails {
           const innerChar = chars[i]!;
 
           if (innerChar === '\\' && i + 1 < chars.length && chars[i + 1] === "'") {
-            result.push('\\"');
-            i++;
+            result.push("'");
+            i += 2;
             continue;
           }
 

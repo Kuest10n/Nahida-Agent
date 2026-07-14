@@ -104,8 +104,7 @@ export function appendReviewError(type: ReviewErrorType, sample: string): void {
     const report = generateReport(type);
     if (report) {
       pendingReports.push(report);
-      // 重置计数器（报告已生成，重新开始累计）
-      list.length = 0;
+      list.splice(0, list.length - 10);
       console.warn(`[RandError] threshold reached: ${type} ×${report.count}, report generated`);
     }
   }

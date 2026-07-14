@@ -44,6 +44,13 @@ quantize_ollama.py
 .vscode/
 *.swp
 *.swo
+.trae/
+.traework/
+
+# Trae agent temp
+export_lora.py
+gen_boundary_data.py
+train_lora.py
 
 # OS
 Thumbs.db
@@ -57,3 +64,6 @@ release/
 .env
 .env.local
 .env.*.local
+
+# Local resource drives (GPT-SoVITS models, RVC, training data)
+F:/nahida/

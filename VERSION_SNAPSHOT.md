@@ -63,7 +63,7 @@
 | GPT-SoVITS | `F:/nahida/v4/纳西妲_ZH/` | v0.7.1（待集成） | 10ep ckpt + pth |
 | 游戏语音 | `F:/nahida/纳西妲/`（1540 条 .wav+.lab） | — | 训练素材源 |
 | 世界观 PDF | `F:/nahida/原神世界观典藏包.zip` | — | worldbook 素材源 |
-| Live2D | — | — | stub（modelUrl 空） |
+| Live2D | `assets/models/nahida/Nahida.model3.json` | v0.8.0 | 真模型（Motions 配置 + 10 表情 + 动作映射对齐） |
 
 ---
 
@@ -127,7 +127,7 @@
 
 ## 资源
 
-- TTS: GPT-SoVITS 纳西妲10ep模型（F:/nahida/v4/纳西妲_ZH/），适配器已就绪，待最小闭环测试
+- TTS: GPT-SoVITS 纳西妲10ep模型（F:/nahida/v4/纳西妲_ZH/），API测试通过，适配器已就绪，参考音频路径已配置，已闭环
 - 其他：同 v0.7.0
 
 ## 已知 / 待办
@@ -189,7 +189,7 @@
 | GPT-SoVITS | `F:/nahida/v4/纳西妲_ZH/` | v0.7.1（代码已写，未接主流程） | 10ep ckpt + pth |
 | 游戏语音 | `F:/nahida/纳西妲/`（1540 条 .wav+.lab） | — | 训练素材源 |
 | 世界观 PDF | `F:/nahida/原神世界观典藏包.zip` | — | worldbook 素材源 |
-| Live2D | — | — | stub（modelUrl 空） |
+| Live2D | `assets/models/nahida/Nahida.model3.json` | v0.8.0 | 真模型（Motions 配置 + 10 表情 + 动作映射对齐） |
 
 ## 已知 / 待办
 
@@ -199,7 +199,7 @@
 - [ ] v3 训完后：`data/lora/` 旧 v1 数据删除
 
 ### 待完成（v0.8.x 系列）
-- [ ] v0.8.0：Live2D 真模型 + rhubarb lipsync
+- [x] v0.8.0：Live2D 真模型 + rhubarb lipsync
 - [ ] v0.8.1：托盘 + 全局快捷键(Ctrl+Space) + 开机自启
 - [ ] v0.8.3：cycleLog 持久化到 session.json
 - [ ] v0.8.4：web_fetch source_cred + `/stats` Token 面板

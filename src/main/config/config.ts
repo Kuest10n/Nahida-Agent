@@ -109,7 +109,7 @@ const DEFAULT_RVC_ROOT = '';
 const DEFAULT_EDGE_VOICE = 'zh-CN-XiaoyiNeural';
 const DEFAULT_GPTSOVITS_API_URL = 'http://localhost:9880';
 const DEFAULT_GPTSOVITS_REF_DIR = 'F:/nahida/v4/纳西妲_ZH/reference_audios/中文/emotions';
-const DEFAULT_GPTSOVITS_MODEL_DIR = 'F:/nahida/v4/纳西妲_ZH';
+const DEFAULT_GPTSOVITS_MODEL_DIR = '';
 
 // ── 模块状态 ──────────────────────────────────────────────────
 

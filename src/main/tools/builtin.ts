@@ -46,30 +46,55 @@ const clockTool: ToolDefinition = {
 
 // ── 工具 2：web_fetch（抓取网页正文） ─────────────────────────
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname.startsWith('localhost') || hostname.startsWith('127.')) return false;
+    if (hostname.startsWith('10.')) return false;
+    if (hostname.startsWith('172.')) {
+      const parts = hostname.split('.');
+      const secondOctet = parseInt(parts[1] ?? '0', 10);
+      if (secondOctet >= 16 && secondOctet <= 31) return false;
+    }
+    if (hostname.startsWith('192.168.')) return false;
+    if (hostname === '169.254.169.254') return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const webFetchTool: ToolDefinition = {
   name: 'web_fetch',
   description: '抓取指定 URL 的网页正文内容（HTML 转 plain text）。当用户要求"查一下""获取网页""看看这个链接"时调用。',
   parameters: z.object({
-    url: z.string().url().describe('要抓取的网页 URL，必须包含 http:// 或 https://'),
+    url: z.string().url().describe('要抓取的网页 URL，必须是 https:// 开头的公网地址'),
     max_length: z.number().int().positive().max(10000).optional()
       .describe('返回正文最大字符数，默认 2000，避免 token 爆炸'),
   }),
   async execute(params): Promise<ToolResult> {
     const startTime = Date.now();
-    // params 类型是 Record<string, unknown>，需显式断言
     const url = params.url as string;
     const maxLenRaw = params.max_length;
     const maxLen = typeof maxLenRaw === 'number' ? maxLenRaw : 2000;
 
+    if (!isSafeUrl(url)) {
+      return {
+        ok: false,
+        data: 'URL 安全校验失败：仅允许访问公网 HTTPS 地址',
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
     try {
-      // 超时控制：10s
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
 
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          // 模拟浏览器 UA，避免部分网站拦截
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) NahidaAgent/0.1',
         },
       });
@@ -86,7 +111,6 @@ const webFetchTool: ToolDefinition = {
       const html = await response.text();
       const text = htmlToText(html);
 
-      // 截断到 max_length
       const truncated = text.length > maxLen
         ? `${text.slice(0, maxLen)}...[truncated]`
         : text;

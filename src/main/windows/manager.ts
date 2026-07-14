@@ -68,11 +68,11 @@ export function createMainWindow(): BrowserWindow {
   return win;
 }
 
-// Live2D 透明漂浮窗（T3 再挂 Pixi，先占窗口位）
+// Live2D 透明漂浮窗
 export function createLive2dWindow(): BrowserWindow {
   const { workAreaSize } = screen.getPrimaryDisplay();
-  const winWidth = 320;
-  const winHeight = 480;
+  const winWidth = 450;
+  const winHeight = 700;
 
   const win = new BrowserWindow({
     width: winWidth,
@@ -91,6 +91,8 @@ export function createLive2dWindow(): BrowserWindow {
       sandbox: false,
     },
   });
+
+  // 默认允许鼠标事件；动态穿透由渲染层通过 live2d:penetrate 控制
 
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(`${process.env.VITE_DEV_SERVER_URL}live2d/index.html`);

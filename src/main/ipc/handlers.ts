@@ -5,14 +5,15 @@ import { Router, type CommandType } from '../router/router';
 import { ReviewLayer } from '../agent/review-layer';
 import { generateResponse, clearSessionHistory, type CycleLogEntry } from '../agent/agent-core';
 import { resolveActionEmotion, resolveExpression, NahidaEmotion } from '../../shared/types/emotion';
-import { TtsScheduler, EdgeTtsAdapter } from '../tts';
+import { TtsScheduler, GptSoVitsAdapter } from '../tts';
 import { consumePendingReports } from '../agent/rand-error';
+import { setAutoStart, isAutoStartEnabled } from '../tray/autostart';
 
 // 路由层 + 四审层 + TTS 调度器 实例（全局单例）
 const router = new Router();
 const reviewer = new ReviewLayer({ enabled: true });
-// TTS：第一阶段用 edge-tts（纯 CPU），RVC 桥接训练完成后在 scheduler 内切换
-const ttsScheduler = new TtsScheduler(new EdgeTtsAdapter());
+// TTS：GPT-SoVITS 直出纳西妲音色（已替代 edge-tts + RVC 两步流程）
+const ttsScheduler = new TtsScheduler(new GptSoVitsAdapter());
 
 // ── 命令意图的预设回复（不走模型，省 token） ──
 const COMMAND_RESPONSES: Record<CommandType, string> = {
@@ -171,6 +172,21 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         latencyMs: reviewResult.latencyMs,
       },
     };
+  });
+
+  registerValidatedHandler(IpcChannel.AUTOSTART_SET, (_event: IpcMainInvokeEvent, payload: { enabled: boolean }) => {
+    setAutoStart(payload.enabled);
+    return { ok: true, enabled: payload.enabled };
+  });
+
+  registerValidatedHandler(IpcChannel.AUTOSTART_GET, () => {
+    const enabled = isAutoStartEnabled();
+    return { ok: true, enabled };
+  });
+
+  registerValidatedHandler(IpcChannel.LIVE2D_PENETRATE, (_event: IpcMainInvokeEvent, payload: { enable: boolean }) => {
+    live2dWindow.setIgnoreMouseEvents(payload.enable);
+    return { ok: true };
   });
 }
 

@@ -16,6 +16,7 @@ export default defineConfig({
   plugins: [react()],
   root: resolve(__dirname, 'src/renderer'),
   base: './',
+  publicDir: resolve(__dirname, 'assets'),
   resolve: {
     alias: {
       '@shared': resolve(__dirname, 'src/shared'),

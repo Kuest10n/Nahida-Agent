@@ -1,8 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../shared/types/ipc';
 
-// 6 通道白名单 —— 只允许列表内的 channel，防渲染层乱发
-const INVOKE_CHANNELS = new Set<string>([IpcChannel.AGENT_CHAT]);
+// 通道白名单 —— 只允许列表内的 channel，防渲染层乱发
+const INVOKE_CHANNELS = new Set<string>([
+  IpcChannel.AGENT_CHAT,
+  IpcChannel.AUTOSTART_SET,
+  IpcChannel.AUTOSTART_GET,
+  IpcChannel.LIVE2D_PENETRATE,
+]);
 
 // 渲染层能监听的通道（main → renderer 单向推）
 const LISTEN_CHANNELS = new Set<string>([

@@ -58,6 +58,9 @@ const store = new Map<string, PersistedSession>();
 /** 每个 session 的写盘定时器（debounce） */
 const saveTimers = new Map<string, NodeJS.Timeout>();
 
+/** 每个 session 的写盘互斥锁（防止并发写入） */
+const storeMutex = new Map<string, Promise<void>>();
+
 /** 是否已初始化 */
 let initialized = false;
 
@@ -170,8 +173,14 @@ export function appendMessage(
   session.lastActivity = now;
   session.messages.push({ role, content, timestamp: now });
 
-  // debounce 写盘
-  scheduleSave(sessionId);
+  const existing = storeMutex.get(sessionId);
+  const next = (existing ?? Promise.resolve()).then(() => {
+    scheduleSave(sessionId);
+  }).catch(() => {
+    saveTimers.delete(sessionId);
+    storeMutex.delete(sessionId);
+  });
+  storeMutex.set(sessionId, next);
 }
 
 /**
@@ -234,8 +243,12 @@ function scheduleSave(sessionId: string): void {
   if (existing) clearTimeout(existing);
 
   const timer = setTimeout(() => {
-    saveSession(sessionId);
-    saveTimers.delete(sessionId);
+    try {
+      saveSession(sessionId);
+    } finally {
+      saveTimers.delete(sessionId);
+      storeMutex.delete(sessionId);
+    }
   }, SAVE_DEBOUNCE_MS);
 
   saveTimers.set(sessionId, timer);

@@ -39,6 +39,11 @@ function getReviewModel(): string {
 /** 模型审查开关（可通过 setReviewEnabled 修改） */
 let reviewEnabled = true;
 
+/** 模型调用失败计数器（用于熔断） */
+let modelFailCount = 0;
+/** 熔断阈值：连续失败次数 */
+const FAIL_THRESHOLD = 5;
+
 /** 设置模型审查开关 */
 export function setReviewEnabled(enabled: boolean): void {
   reviewEnabled = enabled;
@@ -247,6 +252,10 @@ async function modelReview(
   sentence: string,
   opts?: ReviewOpts,
 ): Promise<DimResult> {
+  if (modelFailCount >= FAIL_THRESHOLD) {
+    throw new Error('model review circuit breaker triggered');
+  }
+
   const instruction = buildDimInstruction(dim, sentence, opts);
 
   const response = await fetch(getOllamaChatUrl(), {
@@ -270,14 +279,29 @@ async function modelReview(
   });
 
   if (!response.ok) {
+    modelFailCount++;
     throw new Error(`ollama responded ${response.status}: ${await response.text()}`);
   }
+
+  modelFailCount = 0;
 
   const data = await response.json();
   // /api/chat 返回格式：{ message: { content: "..." } }
   const rawOutput: string = data.message?.content ?? '';
 
-  return normalizeReviewJson(rawOutput, dim, sentence, opts);
+  const result = normalizeReviewJson(rawOutput, dim, sentence, opts);
+
+  // Token 打点（近似计数，足够 /stats 命令使用）
+  // ollama /api/chat 不返回 token 数，用字符数估算：1 token ≈ 4 字符
+  const promptTokens = Math.ceil(instruction.length / 4);
+  const completionTokens = Math.ceil(rawOutput.length / 4);
+  (result as DimResult & { tokenUsage?: { promptTokens: number; completionTokens: number; model: string } }).tokenUsage = {
+    promptTokens,
+    completionTokens,
+    model: getReviewModel(),
+  };
+
+  return result;
 }
 
 /**

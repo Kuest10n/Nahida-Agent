@@ -62,5 +62,4 @@ export interface TtsAdapter {
 export { VoiceCache } from './voice-cache';
 export { EdgeTtsAdapter } from './edge-tts-adapter';
 export { GptSoVitsAdapter } from './gpt-sovits-adapter';
-export { RvcBridge } from './rvc-bridge';
 export { TtsScheduler } from './scheduler';

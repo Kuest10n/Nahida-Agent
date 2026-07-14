@@ -156,25 +156,42 @@ export class ProcessScanner {
 
   /** 列出所有进程（Windows: tasklist） */
   private async listProcesses(): Promise<Array<{ name: string; pid: number }>> {
-    const { stdout } = await execAsync('tasklist /fo csv /nh', {
-      windowsHide: true,
-    });
+    try {
+      const { stdout } = await execAsync('tasklist /fo csv /nh', {
+        windowsHide: true,
+      });
 
-    const lines = stdout.trim().split('\n');
-    const processes: Array<{ name: string; pid: number }> = [];
+      const lines = stdout.trim().split('\n');
+      const processes: Array<{ name: string; pid: number }> = [];
 
-    for (const line of lines) {
-      // 格式: "进程名","PID","会话名","会话#","内存使用"
-      const match = line.match(/"([^"]+)","(\d+)"/);
-      if (match && match[1] && match[2]) {
-        processes.push({
-          name: match[1],
-          pid: parseInt(match[2], 10),
-        });
+      for (const line of lines) {
+        const match = line.match(/"([^"]+)","(\d+)"/);
+        if (match && match[1] && match[2]) {
+          processes.push({
+            name: match[1],
+            pid: parseInt(match[2], 10),
+          });
+        }
       }
-    }
 
-    return processes;
+      return processes;
+    } catch (e: any) {
+      if (e.stdout) {
+        const lines = e.stdout.trim().split('\n');
+        const processes: Array<{ name: string; pid: number }> = [];
+        for (const line of lines) {
+          const match = line.match(/"([^"]+)","(\d+)"/);
+          if (match && match[1] && match[2]) {
+            processes.push({
+              name: match[1],
+              pid: parseInt(match[2], 10),
+            });
+          }
+        }
+        return processes;
+      }
+      throw e;
+    }
   }
 
   /** 获取进程的窗口标题（Windows: PowerShell Get-Process） */

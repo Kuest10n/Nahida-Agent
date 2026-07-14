@@ -1,32 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { initLive2D, playAction } from './manager';
+import { initLive2D, playAction, hitTestModel } from './manager';
+import { IpcChannel } from '../../shared/types/ipc';
 
-/**
- * Live2D 窗入口
- *
- * - 有模型素材 → Pixi + Cubism4 真实渲染
- * - 没模型素材 → stub 模式（草光呼吸占位），不炸
- * - 统一通过 manager.ts 的 playAction() 播动作
- *
- * 素材路径：后续放到 public/models/nahida/nahida.model3.json
- */
 const Live2dApp: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<string>('loading');
   const [lastAction, setLastAction] = useState<string>('idle');
+  const [isHoveringModel, setIsHoveringModel] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    // 素材路径（后续配置化，先空走 stub）
-    const modelUrl = '';
+    const modelUrl = '/models/nahida/Nahida.model3.json';
 
     initLive2D({
       canvas: canvasRef.current,
       modelUrl,
       width: window.innerWidth,
       height: window.innerHeight,
+      scale: 0.45,
     })
       .then(() => {
         setStatus('ready');
@@ -37,7 +30,6 @@ const Live2dApp: React.FC = () => {
         console.error('[Live2D] init failed:', e);
       });
 
-    // 监听主进程 action（唯一监听点，manager.ts 不再重复监听）
     const cleanup = window.nahidaAPI?.on('live2d:action', (payload) => {
       const data = payload as { actionTag: string; expression?: string };
       setLastAction(data.actionTag);
@@ -49,13 +41,35 @@ const Live2dApp: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    // 模型未加载完成时不启用动态穿透，避免错误设置为穿透模式后无法恢复交互
+    if (status !== 'ready') return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const hit = hitTestModel(x, y);
+      setIsHoveringModel(hit);
+
+      // 只有状态变化时才发 IPC，减少主进程压力
+      window.nahidaAPI?.invoke(IpcChannel.LIVE2D_PENETRATE, { enable: !hit }).catch(() => {
+        // IPC 失败静默处理，避免抛异常打断交互
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [status]);
+
   return (
     <div style={{
       width: '100%',
       height: '100%',
       position: 'relative',
     }}>
-      {/* Pixi canvas 占满透明窗 */}
       <canvas
         ref={canvasRef}
         style={{
@@ -65,7 +79,6 @@ const Live2dApp: React.FC = () => {
         }}
       />
 
-      {/* 状态标签（调试用，后续可关） */}
       <div style={{
         position: 'absolute',
         bottom: 8,
@@ -75,7 +88,7 @@ const Live2dApp: React.FC = () => {
         opacity: 0.6,
         userSelect: 'none',
       }}>
-        {status} · {lastAction}
+        {status} · {lastAction} · hover:{isHoveringModel ? 'yes' : 'no'}
       </div>
     </div>
   );

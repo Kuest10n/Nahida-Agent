@@ -7,7 +7,10 @@ export enum IpcChannel {
   AGENT_TOOL_CALL = 'agent:tool-call',
   AGENT_STATE_CHANGE = 'agent:state-change',
   LIVE2D_ACTION = 'live2d:action',
+  LIVE2D_PENETRATE = 'live2d:penetrate',
   TTS_CHUNK = 'tts:chunk',
+  AUTOSTART_SET = 'autostart:set',
+  AUTOSTART_GET = 'autostart:get',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -66,6 +69,11 @@ export const live2dActionSchema = z.object({
 });
 export type Live2dActionPayload = z.infer<typeof live2dActionSchema>;
 
+export const live2dPenetrateSchema = z.object({
+  enable: z.boolean(),
+});
+export type Live2dPenetratePayload = z.infer<typeof live2dPenetrateSchema>;
+
 // ---------- tts:chunk（语音 chunk 推送） ----------
 export const ttsChunkSchema = z.object({
   chunkIndex: z.number(),
@@ -76,6 +84,14 @@ export const ttsChunkSchema = z.object({
 });
 export type TtsChunkPayload = z.infer<typeof ttsChunkSchema>;
 
+export const autostartSetSchema = z.object({
+  enabled: z.boolean(),
+});
+export type AutostartSetPayload = z.infer<typeof autostartSetSchema>;
+
+export const autostartGetSchema = z.object({});
+export type AutostartGetPayload = z.infer<typeof autostartGetSchema>;
+
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
   [IpcChannel.AGENT_CHAT]: agentChatSchema,
@@ -83,7 +99,10 @@ export const ipcSchemas = {
   [IpcChannel.AGENT_TOOL_CALL]: agentToolCallSchema,
   [IpcChannel.AGENT_STATE_CHANGE]: agentStateChangeSchema,
   [IpcChannel.LIVE2D_ACTION]: live2dActionSchema,
+  [IpcChannel.LIVE2D_PENETRATE]: live2dPenetrateSchema,
   [IpcChannel.TTS_CHUNK]: ttsChunkSchema,
+  [IpcChannel.AUTOSTART_SET]: autostartSetSchema,
+  [IpcChannel.AUTOSTART_GET]: autostartGetSchema,
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;
