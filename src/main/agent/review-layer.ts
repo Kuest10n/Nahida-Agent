@@ -403,11 +403,17 @@ export class ReviewLayer {
   }
 
   /**
-   * 执行三维审查（A+B+C），组装成 ReviewResult
+   * 执行审查（A+B+C），think 档启用双审（Gun 双审雏形）
    *
    * 混合策略（v2 实测优化）：
    *   A/B → ruleFallback（正则+括号检测，<1ms，1.5B 模型在 A/B 分类不如规则）
    *   C   → modelReview（情绪分类需要语义理解，模型比规则强）
+   *
+   * v0.9.1 Gun 双审：
+   *   think 档启用两轮审查：
+   *     第一轮：标准 A+B+C 审查
+   *     第二轮：CoT 结构专项检查（检查是否有路径/步骤/分析等关键词）
+   *   两轮都通过才算 pass
    *
    * 延迟：3 次模型调用 829ms → 1 次模型调用 ~377ms
    * v3 训练后如果模型 A/B 准确率超过规则，再切回全模型
@@ -424,8 +430,7 @@ export class ReviewLayer {
 
     const opts: ReviewOpts = { userMessage, routeTier };
 
-    // A/B 用规则（快+准），C 用模型（语义理解）
-    // reviewOutput 内部已含 try/catch + ruleFallback 兜底，不会抛异常
+    // ── 第一轮：标准 A+B+C 审查 ──
     const aResult = ruleFallback('A', assistantOutput, opts);
     const bResult = ruleFallback('B', assistantOutput, opts);
 
@@ -438,7 +443,18 @@ export class ReviewLayer {
     const output = this.mapOutput(bResult, assistantOutput);
     const emotion = this.mapEmotion(cResult, assistantOutput);
 
-    const pass = intent.score >= 3 && output.score >= 3 && emotion.score >= 3;
+    let pass = intent.score >= 3 && output.score >= 3 && emotion.score >= 3;
+
+    // ── 第二轮：think 档 CoT 结构专项检查（Gun 双审） ──
+    if (pass && routeTier === 'think') {
+      const cotCheck = this.checkCoTStructure(assistantOutput);
+      if (!cotCheck.pass) {
+        pass = false;
+        output.reason = cotCheck.reason;
+        output.score = 2;
+      }
+    }
+
     const latencyMs = performance.now() - startTime;
 
     // Rand_error 追踪：fail 路径记录到 rand-error 模块（同类型>50 自动抛报告）
@@ -462,6 +478,34 @@ export class ReviewLayer {
       rewritePrompt: pass ? undefined : this.buildRewritePrompt(output, emotion),
       latencyMs,
     };
+  }
+
+  /**
+   * CoT 结构专项检查（think 档第二轮审查）
+   *
+   * 检查 /think 模式下的回复是否包含思考链结构：
+   *   - 路径/步骤/拆/分/梳理/分析 等关键词
+   *   - 或者包含逻辑推导标记（→/因此/所以/首先/其次）
+   *
+   * @param output 助手输出
+   * @returns 检查结果
+   */
+  private checkCoTStructure(output: string): { pass: boolean; reason?: string } {
+    // CoT 关键词（来自 ruleFallback B 维）
+    const cotKeywords = /路径|步骤|拆|分|梳理|分析/;
+    // 逻辑推导标记
+    const logicMarkers = /→|因此|所以|首先|其次|最后|综上/;
+
+    const hasCoT = cotKeywords.test(output) || logicMarkers.test(output);
+
+    if (!hasCoT) {
+      return {
+        pass: false,
+        reason: 'think 档缺少 CoT 结构（未检测到路径/步骤/分析等关键词）',
+      };
+    }
+
+    return { pass: true };
   }
 
   // ── 映射函数：DimResult → ReviewResult 子类型 ────────────────

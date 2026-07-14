@@ -7,6 +7,11 @@ const INVOKE_CHANNELS = new Set<string>([
   IpcChannel.AUTOSTART_SET,
   IpcChannel.AUTOSTART_GET,
   IpcChannel.LIVE2D_PENETRATE,
+  IpcChannel.PERSONALITY_GET,
+  IpcChannel.PERSONALITY_LIST,
+  IpcChannel.PERSONALITY_SWITCH,
+  IpcChannel.PERSONALITY_CREATE,
+  IpcChannel.PERSONALITY_DELETE,
 ]);
 
 // 渲染层能监听的通道（main → renderer 单向推）

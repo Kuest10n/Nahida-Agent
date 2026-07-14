@@ -34,6 +34,16 @@ export interface PersistedMessage {
   content: string;
   /** 消息时间戳（ms） */
   timestamp: number;
+  /** 循环日志（T/F/Tk/R 四段，仅 assistant 消息有） */
+  cycleLog?: CycleLogEntry[];
+}
+
+/** 循环日志条目（与 agent-core 的 CycleLogEntry 对齐） */
+export interface CycleLogEntry {
+  phase: 'T' | 'F' | 'Tk' | 'R';
+  ts: number;
+  durationMs: number;
+  summary: string;
 }
 
 // ── 常量 ──────────────────────────────────────────────────────
@@ -154,11 +164,13 @@ export function listSessions(): PersistedSession[] {
  * @param sessionId 会话 ID
  * @param role      消息角色
  * @param content   消息内容
+ * @param cycleLog  循环日志（仅 assistant 消息，可选）
  */
 export function appendMessage(
   sessionId: string,
   role: 'user' | 'assistant',
   content: string,
+  cycleLog?: CycleLogEntry[],
 ): void {
   if (!initialized) loadSessions();
 
@@ -171,7 +183,7 @@ export function appendMessage(
   }
 
   session.lastActivity = now;
-  session.messages.push({ role, content, timestamp: now });
+  session.messages.push({ role, content, timestamp: now, cycleLog });
 
   const existing = storeMutex.get(sessionId);
   const next = (existing ?? Promise.resolve()).then(() => {

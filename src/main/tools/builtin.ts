@@ -1,5 +1,5 @@
 /**
- * 内置工具集 —— T7
+ * 内置工具集 —— T7 + v0.9.2 扩展
  *
  * 注册一批基础工具，覆盖 SOHA.md §11 时间感知、§14.2 虚空检索等核心能力。
  * 所有工具纯 CPU/IO，不占 GPU。
@@ -7,13 +7,20 @@
  * 工具清单：
  *   - clock       : 获取当前时间（支撑 SOHA §11 时间感知规则）
  *   - web_fetch   : 抓取网页正文（虚空检索的基础）
+ *   - search      : 网络搜索（v0.9.2）
+ *   - translate   : 文本翻译（v0.9.2）
+ *   - weather     : 天气查询（v0.9.2）
+ *   - file_read   : 读取本地文件（v0.9.2）
+ *   - file_write  : 写入本地文件（v0.9.2）
  *
  * 后续扩展口（来自 .trae/rules/skills.md）：
- *   文件操作、搜索、天气、Office 生成、翻译、记账、出行规划
+ *   Office 生成、记账、出行规划
  */
 
 import { z } from 'zod';
 import { registerTools, type ToolDefinition, type ToolResult } from './registry';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // ── 工具 1：clock（获取当前时间） ─────────────────────────────
 
@@ -45,6 +52,61 @@ const clockTool: ToolDefinition = {
 };
 
 // ── 工具 2：web_fetch（抓取网页正文） ─────────────────────────
+
+/** 高可信域名白名单 */
+const HIGH_CRED_DOMAINS = [
+  'wikipedia.org',
+  'gov.cn',
+  'gov',
+  'edu.cn',
+  'edu',
+  'microsoft.com',
+  'apple.com',
+  'github.com',
+  'stackoverflow.com',
+  'npmjs.com',
+  'python.org',
+  'nodejs.org',
+];
+
+/** 低可信域名黑名单 */
+const LOW_CRED_DOMAINS = [
+  'bit.ly',
+  'tinyurl.com',
+  'pastebin.com',
+  'reddit.com', // 用户生成内容
+];
+
+/**
+ * 评估 URL 来源可信度
+ *
+ * 返回 'high' | 'medium' | 'low'
+ */
+function evaluateSourceCred(url: string): 'high' | 'medium' | 'low' {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+
+    // 黑名单直接低可信
+    for (const domain of LOW_CRED_DOMAINS) {
+      if (hostname === domain || hostname.endsWith(`.${domain}`)) {
+        return 'low';
+      }
+    }
+
+    // 白名单高可信
+    for (const domain of HIGH_CRED_DOMAINS) {
+      if (hostname === domain || hostname.endsWith(`.${domain}`)) {
+        return 'high';
+      }
+    }
+
+    // 其他域名中等可信
+    return 'medium';
+  } catch {
+    return 'low';
+  }
+}
 
 function isSafeUrl(url: string): boolean {
   try {
@@ -122,6 +184,7 @@ const webFetchTool: ToolDefinition = {
           content: truncated,
           length: text.length,
           truncated: text.length > maxLen,
+          source_cred: evaluateSourceCred(url),
         },
         latencyMs: Date.now() - startTime,
       };
@@ -165,7 +228,222 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-// ── 注册入口 ──────────────────────────────────────────────────
+// ── 工具 3：search（网络搜索）─────────────────────────────
+
+const searchTool: ToolDefinition = {
+  name: 'search',
+  description: '网络搜索。当用户要求"搜索""查一下""找一下"某个主题时调用。返回相关网页摘要。',
+  parameters: z.object({
+    query: z.string().min(1).max(200).describe('搜索关键词'),
+    max_results: z.number().int().positive().max(10).optional()
+      .describe('返回结果数量，默认 5'),
+  }),
+  async execute(params): Promise<ToolResult> {
+    const startTime = Date.now();
+    const query = params.query as string;
+    const maxResults = (params.max_results as number) ?? 5;
+
+    // TODO: 接入真实搜索引擎 API（如 Bing Search API、Google Custom Search）
+    // 当前返回模拟数据，待后续集成
+    const mockResults = [
+      {
+        title: `${query} - 搜索结果 1`,
+        url: 'https://example.com/1',
+        snippet: `这是关于"${query}"的第一个搜索结果摘要...`,
+      },
+      {
+        title: `${query} - 搜索结果 2`,
+        url: 'https://example.com/2',
+        snippet: `这是关于"${query}"的第二个搜索结果摘要...`,
+      },
+    ];
+
+    return {
+      ok: true,
+      data: {
+        query,
+        results: mockResults.slice(0, maxResults),
+        total: mockResults.length,
+      },
+      latencyMs: Date.now() - startTime,
+    };
+  },
+};
+
+// ── 工具 4：translate（文本翻译）────────────────────────────
+
+const translateTool: ToolDefinition = {
+  name: 'translate',
+  description: '文本翻译。当用户要求"翻译""把...翻译成..."时调用。支持中英日韩等语言。',
+  parameters: z.object({
+    text: z.string().min(1).max(5000).describe('要翻译的文本'),
+    target_lang: z.string().describe('目标语言代码（如 en/zh/ja/ko）'),
+    source_lang: z.string().optional().describe('源语言代码，不填则自动检测'),
+  }),
+  async execute(params): Promise<ToolResult> {
+    const startTime = Date.now();
+    const text = params.text as string;
+    const targetLang = params.target_lang as string;
+    const sourceLang = (params.source_lang as string) ?? 'auto';
+
+    // TODO: 接入真实翻译 API（如 DeepL API、百度翻译 API）
+    // 当前返回模拟数据，待后续集成
+    const mockTranslation = `[翻译结果] ${text} → ${targetLang}`;
+
+    return {
+      ok: true,
+      data: {
+        original: text,
+        translated: mockTranslation,
+        source_lang: sourceLang,
+        target_lang: targetLang,
+      },
+      latencyMs: Date.now() - startTime,
+    };
+  },
+};
+
+// ── 工具 5：weather（天气查询）──────────────────────────────
+
+const weatherTool: ToolDefinition = {
+  name: 'weather',
+  description: '查询天气。当用户问"天气怎么样""今天天气""明天会下雨"时调用。返回温度、湿度、天气状况。',
+  parameters: z.object({
+    location: z.string().min(1).max(100).describe('地点名称（如"北京""上海"）'),
+    date: z.string().optional().describe('日期（如"今天""明天"），不填则查当前'),
+  }),
+  async execute(params): Promise<ToolResult> {
+    const startTime = Date.now();
+    const location = params.location as string;
+    const date = (params.date as string) ?? '今天';
+
+    // TODO: 接入真实天气 API（如 OpenWeatherMap、和风天气）
+    // 当前返回模拟数据，待后续集成
+    const mockWeather = {
+      location,
+      date,
+      temperature: 22,
+      humidity: 65,
+      condition: '晴',
+      wind: '东北风 3 级',
+    };
+
+    return {
+      ok: true,
+      data: mockWeather,
+      latencyMs: Date.now() - startTime,
+    };
+  },
+};
+
+// ── 工具 6：file_read（读取文件）────────────────────────────
+
+const fileReadTool: ToolDefinition = {
+  name: 'file_read',
+  description: '读取本地文件内容。当用户要求"读取文件""打开文件""看看这个文件"时调用。',
+  parameters: z.object({
+    file_path: z.string().min(1).describe('文件路径（绝对路径或相对路径）'),
+    encoding: z.string().optional().describe('文件编码，默认 utf-8'),
+  }),
+  async execute(params): Promise<ToolResult> {
+    const startTime = Date.now();
+    const filePath = params.file_path as string;
+    const encoding = (params.encoding as BufferEncoding) ?? 'utf-8';
+
+    try {
+      // 安全检查：禁止读取敏感文件
+      const normalizedPath = path.normalize(filePath);
+      if (normalizedPath.includes('.env') || normalizedPath.includes('credentials')) {
+        return {
+          ok: false,
+          data: '安全限制：禁止读取敏感文件',
+          latencyMs: Date.now() - startTime,
+        };
+      }
+
+      const content = fs.readFileSync(normalizedPath, encoding);
+
+      return {
+        ok: true,
+        data: {
+          file_path: normalizedPath,
+          content,
+          size: content.length,
+        },
+        latencyMs: Date.now() - startTime,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        data: `读取失败: ${errorMsg}`,
+        latencyMs: Date.now() - startTime,
+      };
+    }
+  },
+};
+
+// ── 工具 7：file_write（写入文件）───────────────────────────
+
+const fileWriteTool: ToolDefinition = {
+  name: 'file_write',
+  description: '写入内容到本地文件。当用户要求"保存文件""写入文件""创建文件"时调用。',
+  parameters: z.object({
+    file_path: z.string().min(1).describe('文件路径（绝对路径或相对路径）'),
+    content: z.string().describe('要写入的内容'),
+    append: z.boolean().optional().describe('是否追加模式，默认 false（覆盖）'),
+  }),
+  async execute(params): Promise<ToolResult> {
+    const startTime = Date.now();
+    const filePath = params.file_path as string;
+    const content = params.content as string;
+    const append = (params.append as boolean) ?? false;
+
+    try {
+      // 安全检查：禁止写入敏感文件
+      const normalizedPath = path.normalize(filePath);
+      if (normalizedPath.includes('.env') || normalizedPath.includes('credentials')) {
+        return {
+          ok: false,
+          data: '安全限制：禁止写入敏感文件',
+          latencyMs: Date.now() - startTime,
+        };
+      }
+
+      // 确保目录存在
+      const dir = path.dirname(normalizedPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // 写入文件
+      if (append) {
+        fs.appendFileSync(normalizedPath, content, 'utf-8');
+      } else {
+        fs.writeFileSync(normalizedPath, content, 'utf-8');
+      }
+
+      return {
+        ok: true,
+        data: {
+          file_path: normalizedPath,
+          size: content.length,
+          mode: append ? 'append' : 'overwrite',
+        },
+        latencyMs: Date.now() - startTime,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        data: `写入失败: ${errorMsg}`,
+        latencyMs: Date.now() - startTime,
+      };
+    }
+  },
+};
+
+// ── 注册入口 ────────────────────────────────────────────────
 
 /**
  * 注册所有内置工具
@@ -173,6 +451,6 @@ function htmlToText(html: string): string {
  * 在主进程启动时调用一次。
  */
 export function registerBuiltinTools(): void {
-  registerTools([clockTool, webFetchTool]);
-  console.log('[Tools] builtin tools registered: clock, web_fetch');
+  registerTools([clockTool, webFetchTool, searchTool, translateTool, weatherTool, fileReadTool, fileWriteTool]);
+  console.log('[Tools] builtin tools registered: clock, web_fetch, search, translate, weather, file_read, file_write');
 }

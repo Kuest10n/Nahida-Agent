@@ -4,6 +4,16 @@ import { InputBar } from './InputBar';
 import { StatusBar } from './StatusBar';
 import type { Message } from './types';
 import { generateMessageId, extractActionTag } from './types';
+import { IpcChannel } from '../../shared/types/ipc';
+
+interface Personality {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  default: boolean;
+  createdAt: number;
+}
 
 /**
  * 聊天面板 —— T4 完整聊天界面
@@ -13,11 +23,36 @@ import { generateMessageId, extractActionTag } from './types';
  *   - 输入栏（回车发送 / 点击发送）
  *   - 监听 agent:model-delta 流式推送
  *   - 流式输出时禁用输入
+ *   - 人格切换下拉菜单
  */
 export const ChatPanel: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingId, setStreamingId] = useState<string | null>(null);
+  const [currentPersonality, setCurrentPersonality] = useState<Personality | null>(null);
+  const [personalities, setPersonalities] = useState<Personality[]>([]);
+  const [showPersonalityMenu, setShowPersonalityMenu] = useState(false);
+
+  // 加载人格列表和当前人格
+  useEffect(() => {
+    const loadPersonality = async () => {
+      try {
+        const [currentRes, listRes] = await Promise.all([
+          window.nahidaAPI?.invoke(IpcChannel.PERSONALITY_GET, {}) as Promise<{ ok: boolean; personality?: Personality } | undefined>,
+          window.nahidaAPI?.invoke(IpcChannel.PERSONALITY_LIST, {}) as Promise<{ ok: boolean; personalities: Personality[] } | undefined>,
+        ]);
+        if (currentRes && currentRes.ok) {
+          setCurrentPersonality(currentRes.personality ?? null);
+        }
+        if (listRes && listRes.ok) {
+          setPersonalities(listRes.personalities);
+        }
+      } catch (err) {
+        console.error('[ChatPanel] load personality failed:', err);
+      }
+    };
+    loadPersonality();
+  }, []);
 
   // 监听流式推送
   useEffect(() => {
@@ -121,13 +156,85 @@ export const ChatPanel: React.FC = () => {
       >
         <span style={{ fontSize: 18 }}>🌿</span>
         <span style={{ fontSize: 16, color: '#2e7d32', fontWeight: 500 }}>
-          纳西妲
+          {currentPersonality?.displayName ?? '纳西妲'}
         </span>
         {isStreaming && (
           <span style={{ fontSize: 12, color: '#81c784', marginLeft: 8 }}>
             正在思考...
           </span>
         )}
+
+        {/* 人格切换下拉菜单 */}
+        <div style={{ marginLeft: 'auto', position: 'relative' }}>
+          <button
+            onClick={() => setShowPersonalityMenu(!showPersonalityMenu)}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #e0e0e0',
+              borderRadius: 4,
+              backgroundColor: '#fff',
+              cursor: 'pointer',
+              fontSize: 12,
+              color: '#666',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            切换人格
+            <span>{showPersonalityMenu ? '▲' : '▼'}</span>
+          </button>
+
+          {showPersonalityMenu && (
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: '100%',
+                marginTop: 4,
+                backgroundColor: '#fff',
+                border: '1px solid #e0e0e0',
+                borderRadius: 4,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                padding: 4,
+                minWidth: 160,
+                zIndex: 100,
+              }}
+            >
+              {personalities.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={async () => {
+                    try {
+                      await window.nahidaAPI?.invoke(IpcChannel.PERSONALITY_SWITCH, {
+                        personalityId: p.id,
+                      });
+                      setCurrentPersonality(p);
+                      setMessages([]);
+                    } catch (err) {
+                      console.error('[ChatPanel] switch personality failed:', err);
+                    }
+                    setShowPersonalityMenu(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    textAlign: 'left',
+                    border: 'none',
+                    backgroundColor: p.id === currentPersonality?.id ? '#e8f5e9' : 'transparent',
+                    cursor: 'pointer',
+                    borderRadius: 2,
+                    fontSize: 13,
+                    color: p.id === currentPersonality?.id ? '#2e7d32' : '#333',
+                  }}
+                >
+                  <div style={{ fontWeight: 500 }}>{p.displayName}</div>
+                  <div style={{ fontSize: 11, color: '#999' }}>{p.description}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 消息列表 */}

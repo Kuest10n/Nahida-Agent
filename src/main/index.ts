@@ -3,11 +3,14 @@ import { WindowManager } from './windows/manager';
 import { setupIpcHandlers } from './ipc/handlers';
 import { warmupModel } from './agent/agent-core';
 import { registerBuiltinTools } from './tools/builtin';
+import { registerCalendarTools } from './tools/calendar';
+import { registerAlarmTools } from './tools/alarm';
 import { PerceptionModule } from './perception';
 import { ReviewLayer } from './agent/review-layer';
 import { proactiveQueue } from './agent/proactive-queue';
-import { createTray, destroyTray } from './tray/tray-manager';
+import { createTray, destroyTray, updateTrayStatus } from './tray/tray-manager';
 import { registerShortcuts, unregisterShortcuts } from './tray/shortcuts';
+import { initPersonalityManager } from './memory/personality-manager';
 
 // 单例窗口管理器 + Perception 模块 + 主动开口 reviewer
 const windowMgr = new WindowManager();
@@ -46,12 +49,18 @@ app.whenReady().then(() => {
         fpsAvg: event.data.fpsAvg,
         gpuTemp: event.data.gpuTemp,
       });
+
+      // 托盘状态：硬件报警时切到 busy
+      updateTrayStatus('busy');
+      setTimeout(() => updateTrayStatus('online'), 5000);
     });
   }
 
   perception.start();
 
   registerBuiltinTools();
+
+  initPersonalityManager();
 
   void warmupModel();
 

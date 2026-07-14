@@ -8,6 +8,8 @@ import { resolveActionEmotion, resolveExpression, NahidaEmotion } from '../../sh
 import { TtsScheduler, GptSoVitsAdapter } from '../tts';
 import { consumePendingReports } from '../agent/rand-error';
 import { setAutoStart, isAutoStartEnabled } from '../tray/autostart';
+import { updateTrayStatus } from '../tray/tray-manager';
+import { getCurrentPersonality, listPersonalities, setCurrentPersonality, createPersonality, deletePersonality, initPersonalityManager } from '../memory/personality-manager';
 
 // 路由层 + 四审层 + TTS 调度器 实例（全局单例）
 const router = new Router();
@@ -18,9 +20,10 @@ const ttsScheduler = new TtsScheduler(new GptSoVitsAdapter());
 // ── 命令意图的预设回复（不走模型，省 token） ──
 const COMMAND_RESPONSES: Record<CommandType, string> = {
   '/clear': '（花冠微垂，指尖轻拂虚空屏）……心识印记已清空，新的对话开始啦。',
-  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats',
+  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats /switch-persona',
   '/switch-model': '（虚空屏微光一闪）……模型切换功能还在生长中，再等等吧。',
   '/stats': '（轻托腮）……统计功能还在生长中，再等等吧。',
+  '/switch-persona': '（花冠微颤）……人格切换功能已就绪，试试 /switch-persona nahida 或 /switch-persona ti-bao 吧。',
 };
 
 // T5 Agent 编排：路由层 → generateResponse → 四审 → live2d action
@@ -41,6 +44,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
     console.log('[Router] degrade:', routeResult.degradeDecision.tier);
     console.log('[Router] injection:', routeResult.injectionFlagged);
 
+    // ── 托盘状态：进入 thinking ──
+    updateTrayStatus('busy');
+
     // ── 生成回复：命令走预设，其他意图走真实模型（T5） ──
     let fullOutput: string;
     // cycleLog：T/F/Tk 三段由 agent-core 内打点，R 段在此追加（审查在 handlers 调用）
@@ -53,7 +59,24 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         router.resetSessionGuardrails(sessionId);
         ttsScheduler.clearCache();
       }
-      fullOutput = COMMAND_RESPONSES[routeResult.command ?? '/help'];
+      
+      if (routeResult.command === '/switch-persona') {
+        const match = message.match(/\/switch-persona\s+(\S+)/);
+        if (match && match[1]) {
+          const personalityId = match[1];
+          const success = setCurrentPersonality(personalityId);
+          const personality = getCurrentPersonality();
+          if (success && personality) {
+            fullOutput = `（花冠轻转）……已切换至 ${personality.displayName}，开始新的对话吧。`;
+          } else {
+            fullOutput = '（花冠微垂）……人格切换失败，试试 /switch-persona nahida 或 /switch-persona ti-bao 吧。';
+          }
+        } else {
+          fullOutput = COMMAND_RESPONSES['/switch-persona'];
+        }
+      } else {
+        fullOutput = COMMAND_RESPONSES[routeResult.command ?? '/help'];
+      }
       // 一次性推送完整回复
       mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
         delta: fullOutput,
@@ -153,9 +176,18 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
           audioBase64: result.audioBase64,
           voiceType: reviewResult.emotion.voiceType,
         });
+        live2dWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+          chunkIndex: 0,
+          totalChunks: 1,
+          audioBase64: result.audioBase64,
+          voiceType: reviewResult.emotion.voiceType,
+        });
         console.log('[TTS] pushed chunk, latency:', result.latencyMs, 'ms, cacheHit:', result.cacheHit);
       });
     }
+
+    // ── 托盘状态：恢复 online ──
+    updateTrayStatus('online');
 
     return {
       ok: true,
@@ -187,6 +219,36 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
   registerValidatedHandler(IpcChannel.LIVE2D_PENETRATE, (_event: IpcMainInvokeEvent, payload: { enable: boolean }) => {
     live2dWindow.setIgnoreMouseEvents(payload.enable);
     return { ok: true };
+  });
+
+  registerValidatedHandler(IpcChannel.PERSONALITY_GET, () => {
+    const personality = getCurrentPersonality();
+    return { ok: true, personality };
+  });
+
+  registerValidatedHandler(IpcChannel.PERSONALITY_LIST, () => {
+    const personalities = listPersonalities();
+    return { ok: true, personalities };
+  });
+
+  registerValidatedHandler(IpcChannel.PERSONALITY_SWITCH, (_event: IpcMainInvokeEvent, payload: { personalityId: string }) => {
+    const success = setCurrentPersonality(payload.personalityId);
+    const personality = getCurrentPersonality();
+    return {
+      ok: success,
+      personalityId: success ? payload.personalityId : '',
+      displayName: personality?.displayName ?? '',
+    };
+  });
+
+  registerValidatedHandler(IpcChannel.PERSONALITY_CREATE, (_event: IpcMainInvokeEvent, payload: { id: string; name: string; displayName: string; description: string }) => {
+    const personality = createPersonality(payload);
+    return { ok: !!personality, personality };
+  });
+
+  registerValidatedHandler(IpcChannel.PERSONALITY_DELETE, (_event: IpcMainInvokeEvent, payload: { personalityId: string }) => {
+    const success = deletePersonality(payload.personalityId);
+    return { ok: success };
   });
 }
 

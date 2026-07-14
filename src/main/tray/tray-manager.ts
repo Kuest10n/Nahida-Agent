@@ -1,8 +1,9 @@
-import { Tray, Menu, BrowserWindow, app, MenuItemConstructorOptions } from 'electron';
+import { Tray, Menu, BrowserWindow, app, nativeImage, NativeImage, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 
 let tray: Tray | null = null;
+let currentStatus: TrayStatus = 'online';
 
 export type TrayStatus = 'online' | 'offline' | 'busy';
 
@@ -11,24 +12,33 @@ export interface TrayManagerOptions {
   live2dWindow: BrowserWindow;
 }
 
+const TOOLTIP_MAP: Record<TrayStatus, string> = {
+  online: '纳西妲 Agent · 在线',
+  offline: '纳西妲 Agent · 离线',
+  busy: '纳西妲 Agent · 思考中…',
+};
+
 function getTrayIconPath(status: TrayStatus = 'online'): string {
   const iconNames: Record<TrayStatus, string> = {
     online: 'nahida-tray.png',
     offline: 'nahida-tray-offline.png',
     busy: 'nahida-tray-active.png',
   };
-  
-  const rootDir = app.isPackaged 
-    ? process.resourcesPath 
+
+  const rootDir = app.isPackaged
+    ? process.resourcesPath
     : path.join(__dirname, '../../..');
-  
-  const iconPath = path.join(rootDir, 'assets/tray', iconNames[status]);
-  
-  if (fs.existsSync(iconPath)) {
-    return iconPath;
+
+  return path.join(rootDir, 'assets/tray', iconNames[status]);
+}
+
+function loadTrayIcon(status: TrayStatus): NativeImage | null {
+  const iconPath = getTrayIconPath(status);
+  if (!fs.existsSync(iconPath)) {
+    console.warn(`[Tray] icon not found: ${iconPath}`);
+    return null;
   }
-  
-  return '';
+  return nativeImage.createFromPath(iconPath);
 }
 
 function createMenu(mainWindow: BrowserWindow, live2dWindow: BrowserWindow): Menu {
@@ -64,28 +74,27 @@ function createMenu(mainWindow: BrowserWindow, live2dWindow: BrowserWindow): Men
       },
     },
   ];
-  
+
   return Menu.buildFromTemplate(template);
 }
 
 export function createTray(options: TrayManagerOptions): void {
   const { mainWindow, live2dWindow } = options;
-  
+
   try {
-    const iconPath = getTrayIconPath();
-    
-    if (!iconPath) {
-      console.warn('[Tray] icon file not found, skipping tray creation');
+    const icon = loadTrayIcon('online');
+
+    if (!icon || icon.isEmpty()) {
+      console.warn('[Tray] icon file not found or empty, skipping tray creation');
       return;
     }
-    
-    tray = new Tray(iconPath);
-    
+
+    tray = new Tray(icon);
+
     const contextMenu = createMenu(mainWindow, live2dWindow);
     tray.setContextMenu(contextMenu);
-    
-    tray.setToolTip('纳西妲 Agent');
-    
+    tray.setToolTip(TOOLTIP_MAP['online']);
+
     tray.on('click', () => {
       if (mainWindow.isVisible()) {
         mainWindow.hide();
@@ -94,11 +103,11 @@ export function createTray(options: TrayManagerOptions): void {
         mainWindow.focus();
       }
     });
-    
+
     tray.on('right-click', () => {
       tray?.popUpContextMenu();
     });
-    
+
     console.log('[Tray] tray created successfully');
   } catch (error) {
     console.error('[Tray] failed to create tray:', error);
@@ -107,10 +116,18 @@ export function createTray(options: TrayManagerOptions): void {
 
 export function updateTrayStatus(status: TrayStatus): void {
   if (!tray) return;
-  
+  if (status === currentStatus) return;
+
   try {
-    const iconPath = getTrayIconPath(status);
-    tray.setImage(iconPath);
+    const icon = loadTrayIcon(status);
+    if (!icon || icon.isEmpty()) {
+      console.warn(`[Tray] icon for status "${status}" not found, skipping update`);
+      return;
+    }
+    tray.setImage(icon);
+    tray.setToolTip(TOOLTIP_MAP[status]);
+    currentStatus = status;
+    console.log(`[Tray] status updated: ${status}`);
   } catch (error) {
     console.error('[Tray] failed to update status:', error);
   }
@@ -118,7 +135,6 @@ export function updateTrayStatus(status: TrayStatus): void {
 
 export function updateTrayTooltip(tooltip: string): void {
   if (!tray) return;
-  
   tray.setToolTip(tooltip);
 }
 
@@ -132,4 +148,8 @@ export function destroyTray(): void {
 
 export function getTray(): Tray | null {
   return tray;
+}
+
+export function getTrayStatus(): TrayStatus {
+  return currentStatus;
 }

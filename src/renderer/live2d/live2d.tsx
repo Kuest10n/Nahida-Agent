@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { initLive2D, playAction, hitTestModel } from './manager';
+import { initLive2D, playAction, hitTestModel, playAudioForViseme } from './manager';
 import { IpcChannel } from '../../shared/types/ipc';
 
 const Live2dApp: React.FC = () => {
@@ -30,14 +30,22 @@ const Live2dApp: React.FC = () => {
         console.error('[Live2D] init failed:', e);
       });
 
-    const cleanup = window.nahidaAPI?.on('live2d:action', (payload) => {
+    const cleanupAction = window.nahidaAPI?.on('live2d:action', (payload) => {
       const data = payload as { actionTag: string; expression?: string };
       setLastAction(data.actionTag);
       playAction({ tag: data.actionTag, expression: data.expression });
     });
 
+    const cleanupTts = window.nahidaAPI?.on('tts:chunk', (payload) => {
+      const data = payload as { audioBase64: string };
+      if (data.audioBase64) {
+        void playAudioForViseme(data.audioBase64);
+      }
+    });
+
     return () => {
-      cleanup?.();
+      cleanupAction?.();
+      cleanupTts?.();
     };
   }, []);
 

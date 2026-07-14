@@ -11,6 +11,11 @@ export enum IpcChannel {
   TTS_CHUNK = 'tts:chunk',
   AUTOSTART_SET = 'autostart:set',
   AUTOSTART_GET = 'autostart:get',
+  PERSONALITY_GET = 'personality:get',
+  PERSONALITY_LIST = 'personality:list',
+  PERSONALITY_SWITCH = 'personality:switch',
+  PERSONALITY_CREATE = 'personality:create',
+  PERSONALITY_DELETE = 'personality:delete',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -91,6 +96,86 @@ export type AutostartSetPayload = z.infer<typeof autostartSetSchema>;
 export const autostartGetSchema = z.object({});
 export type AutostartGetPayload = z.infer<typeof autostartGetSchema>;
 
+// ---------- personality:get（获取当前人格） ----------
+export const personalityGetSchema = z.object({});
+export type PersonalityGetPayload = z.infer<typeof personalityGetSchema>;
+
+export const personalityGetResultSchema = z.object({
+  ok: z.boolean(),
+  personality: z.object({
+    id: z.string(),
+    name: z.string(),
+    displayName: z.string(),
+    description: z.string(),
+    default: z.boolean(),
+    createdAt: z.number(),
+  }).optional(),
+});
+export type PersonalityGetResultPayload = z.infer<typeof personalityGetResultSchema>;
+
+// ---------- personality:list（获取人格列表） ----------
+export const personalityListSchema = z.object({});
+export type PersonalityListPayload = z.infer<typeof personalityListSchema>;
+
+export const personalityListResultSchema = z.object({
+  ok: z.boolean(),
+  personalities: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    displayName: z.string(),
+    description: z.string(),
+    default: z.boolean(),
+    createdAt: z.number(),
+  })),
+});
+export type PersonalityListResultPayload = z.infer<typeof personalityListResultSchema>;
+
+// ---------- personality:switch（切换人格） ----------
+export const personalitySwitchSchema = z.object({
+  personalityId: z.string().min(1),
+});
+export type PersonalitySwitchPayload = z.infer<typeof personalitySwitchSchema>;
+
+export const personalitySwitchResultSchema = z.object({
+  ok: z.boolean(),
+  personalityId: z.string(),
+  displayName: z.string(),
+});
+export type PersonalitySwitchResultPayload = z.infer<typeof personalitySwitchResultSchema>;
+
+// ---------- personality:create（创建新人格） ----------
+export const personalityCreateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  displayName: z.string().min(1),
+  description: z.string(),
+});
+export type PersonalityCreatePayload = z.infer<typeof personalityCreateSchema>;
+
+export const personalityCreateResultSchema = z.object({
+  ok: z.boolean(),
+  personality: z.object({
+    id: z.string(),
+    name: z.string(),
+    displayName: z.string(),
+    description: z.string(),
+    default: z.boolean(),
+    createdAt: z.number(),
+  }).nullable(),
+});
+export type PersonalityCreateResultPayload = z.infer<typeof personalityCreateResultSchema>;
+
+// ---------- personality:delete（删除人格） ----------
+export const personalityDeleteSchema = z.object({
+  personalityId: z.string().min(1),
+});
+export type PersonalityDeletePayload = z.infer<typeof personalityDeleteSchema>;
+
+export const personalityDeleteResultSchema = z.object({
+  ok: z.boolean(),
+});
+export type PersonalityDeleteResultPayload = z.infer<typeof personalityDeleteResultSchema>;
+
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
   [IpcChannel.AGENT_CHAT]: agentChatSchema,
@@ -102,6 +187,11 @@ export const ipcSchemas = {
   [IpcChannel.TTS_CHUNK]: ttsChunkSchema,
   [IpcChannel.AUTOSTART_SET]: autostartSetSchema,
   [IpcChannel.AUTOSTART_GET]: autostartGetSchema,
+  [IpcChannel.PERSONALITY_GET]: personalityGetSchema,
+  [IpcChannel.PERSONALITY_LIST]: personalityListSchema,
+  [IpcChannel.PERSONALITY_SWITCH]: personalitySwitchSchema,
+  [IpcChannel.PERSONALITY_CREATE]: personalityCreateSchema,
+  [IpcChannel.PERSONALITY_DELETE]: personalityDeleteSchema,
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

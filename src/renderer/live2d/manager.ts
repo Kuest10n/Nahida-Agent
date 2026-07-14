@@ -33,6 +33,9 @@ let currentPriority = 0;
 /** 模型是否加载完成 */
 let modelReady = false;
 
+/** 音频上下文，用于口型同步 */
+let audioContext: AudioContext | null = null;
+
 // ── 初始化 ────────────────────────────────────────────────────
 
 export interface Live2DInitOptions {
@@ -243,9 +246,78 @@ export function hitTestModel(domX: number, domY: number): boolean {
   }
 }
 
+export async function playAudioForViseme(audioBase64Str: string): Promise<void> {
+  if (!model || !modelReady) return;
+
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+
+    const binaryStr = atob(audioBase64Str);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+
+    const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
+
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const localDataArray = dataArray;
+
+    source.start(0);
+
+    const animateViseme = () => {
+      if (!model || !analyser) return;
+
+      analyser.getByteFrequencyData(localDataArray);
+
+      let sum = 0;
+      const len = localDataArray.length;
+      for (let i = 0; i < len; i++) {
+        sum += localDataArray[i] ?? 0;
+      }
+      const avg = sum / localDataArray.length;
+      const mouthOpen = Math.min(avg / 128, 1);
+
+      try {
+        (model as any).parameter('ParamMouthOpenY', mouthOpen);
+      } catch {
+        // model doesn't support parameter API
+      }
+
+      requestAnimationFrame(animateViseme);
+    };
+
+    animateViseme();
+
+    source.onended = () => {
+      try {
+        (model as any).parameter('ParamMouthOpenY', 0);
+      } catch {
+        // model doesn't support parameter API
+      }
+    };
+  } catch (e) {
+    console.warn('[Live2D] viseme sync failed:', e);
+  }
+}
+
 (window as any).playNahidaAction = (tag: string) => playAction({ tag });
+(window as any).playNahidaAudio = (audioBase64: string) => playAudioForViseme(audioBase64);
 (window as any).nahidaLive2D = {
   getModel: () => model,
   getApp: () => app,
   isReady: () => modelReady,
+  playAudio: (audioBase64: string) => playAudioForViseme(audioBase64),
 };
