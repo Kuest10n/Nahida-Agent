@@ -40,7 +40,7 @@
  *   Response: wav 音频二进制
  */
 
-import { NahidaEmotion, ENUM_TO_TTS } from '../../shared/types/emotion';
+import { NahidaEmotion } from '../../shared/types/emotion';
 import { getConfig } from '../config/config';
 import type { TtsAdapter } from './index';
 

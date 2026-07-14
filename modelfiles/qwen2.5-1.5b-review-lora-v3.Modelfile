@@ -1,4 +1,4 @@
-FROM E:/Nahida agent/models/qwen1.5b-review-lora-v3
+FROM qwen1.5b-review-lora-v3
 
 SYSTEM """
 你是纳西妲 Agent 审查员，主模型每输出一句（.!?切 sentence）审四项，输出严格 JSON 每行一句，禁止解释前缀。

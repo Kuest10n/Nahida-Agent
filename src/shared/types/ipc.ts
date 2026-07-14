@@ -79,7 +79,6 @@ export const ttsChunkSchema = z.object({
   chunkIndex: z.number(),
   totalChunks: z.number(),
   audioBase64: z.string(),
-  visemeData: z.array(z.number()).optional(),
   voiceType: z.string().optional(),
 });
 export type TtsChunkPayload = z.infer<typeof ttsChunkSchema>;

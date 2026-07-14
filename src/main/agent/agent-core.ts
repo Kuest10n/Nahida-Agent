@@ -19,7 +19,7 @@ import { loadSessions, getSessionMessages, appendMessage as persistMessage, clea
 import { getConfig } from '../config/config';
 import { executeToolCall, type RawToolCall } from '../tools/executor';
 import { listToolNames } from '../tools/registry';
-import { trimToBudget, joinBlocks, estimateTokens, type PromptBlock } from './budget';
+import { trimToBudget, joinBlocks, type PromptBlock } from './budget';
 import type { Router } from '../router/router';
 import type { ModelTier, DegradeDecision } from '../router/degrade-strategy';
 import type { RouteIntent } from '../router/router';

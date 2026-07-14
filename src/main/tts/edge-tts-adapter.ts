@@ -20,8 +20,8 @@ import { getConfig } from '../config/config';
 
 // ── 配置 ────────────────────────────────────────────────────
 
-/** 项目 .venv 的 python 路径（edge-tts 装在这里） */
-const PYTHON_PATH = 'e:\\Nahida agent\\.venv\\Scripts\\python.exe';
+/** Python 解释器路径（优先用环境变量，否则用项目 .venv） */
+const PYTHON_PATH = process.env.NAHIDA_PYTHON_PATH || 'e:\\Nahida agent\\.venv\\Scripts\\python.exe';
 
 /** 子进程超时（ms），edge-tts 一般 1-3 秒完成 */
 const SYNTH_TIMEOUT_MS = 10_000;

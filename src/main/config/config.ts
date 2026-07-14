@@ -67,15 +67,15 @@ export interface SessionConfig {
   maxSessions: number;
 }
 
-/** TTS / RVC / GPT-SoVITS 语音配置 */
+/** TTS / GPT-SoVITS / RVC 语音配置 */
 export interface VoiceConfig {
-  /** TTS 适配器类型：edge-tts（CPU 默认）/ gpt-sovits（GPU，Phase 2 主力）/ rvc（GPU，备选） */
-  ttsAdapter: 'edge-tts' | 'gpt-sovits' | 'rvc';
-  /** RVC 模型文件名（assets/rvc/ 下） */
+  /** TTS 适配器类型：edge-tts（CPU 默认）/ gpt-sovits（GPU，日常对话主力） */
+  ttsAdapter: 'edge-tts' | 'gpt-sovits';
+  /** RVC 模型文件名（assets/rvc/ 下，AI 翻唱用） */
   rvcModelName: string;
   /** RVC 模型版本标识 */
   rvcModelVersion: string;
-  /** RVC WebUI 根目录（外部依赖，如 F:\RVC20240604Nvidia） */
+  /** RVC WebUI 根目录（外部依赖，如 F:\\RVC20240604Nvidia） */
   rvcRoot: string;
   /** edge-tts voice 名（默认晓伊） */
   edgeVoice: string;

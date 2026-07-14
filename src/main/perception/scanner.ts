@@ -157,7 +157,7 @@ export class ProcessScanner {
   /** 列出所有进程（Windows: tasklist） */
   private async listProcesses(): Promise<Array<{ name: string; pid: number }>> {
     try {
-      const { stdout } = await execAsync('tasklist /fo csv /nh', {
+      const { stdout } = await execAsync('chcp 65001 >nul 2>&1 && tasklist /fo csv /nh', {
         windowsHide: true,
       });
 
@@ -175,9 +175,9 @@ export class ProcessScanner {
       }
 
       return processes;
-    } catch (e: any) {
-      if (e.stdout) {
-        const lines = e.stdout.trim().split('\n');
+    } catch (e) {
+      if (e instanceof Error && (e as any).stdout) {
+        const lines = (e as any).stdout.trim().split('\n');
         const processes: Array<{ name: string; pid: number }> = [];
         for (const line of lines) {
           const match = line.match(/"([^"]+)","(\d+)"/);

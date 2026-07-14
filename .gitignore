@@ -23,7 +23,6 @@ models/
 
 # 但保留 assets 目录结构（用 .gitkeep）
 !assets/rvc/.gitkeep
-!assets/voice_refs/.gitkeep
 
 # Python wheel 缓存
 *.whl
@@ -51,6 +50,10 @@ quantize_ollama.py
 export_lora.py
 gen_boundary_data.py
 train_lora.py
+
+# LoRA training data (too large for git)
+data/lora/*.jsonl
+data/lora/*.yaml
 
 # OS
 Thumbs.db
