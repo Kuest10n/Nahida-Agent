@@ -1,0 +1,9 @@
+feat: 实现 IPC rand-error 专用通道
+
+架构债清理：
+- 新增 IPCChannel.RAND_ERROR_REPORT 通道定义（src/shared/types/ipc.ts）
+- handlers.ts 将 console.warn 改为 IPC 推送渲染层
+- preload 白名单添加 RAND_ERROR_REPORT 监听权限
+- 渲染层可接收自主进化报告并展示
+
+TS 编译：0 错误

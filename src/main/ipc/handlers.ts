@@ -135,12 +135,20 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
     console.log('[Review] C tag:', reviewResult.emotion.actionTag, 'voice:', reviewResult.emotion.voiceType);
     console.log('[Review] latency:', reviewResult.latencyMs, 'ms');
 
-    // ── Rand_error 消费：有报告则写盘 + 日志告警 ──
-    // IPC 6 通道规范里无 rand-error 通道，暂用 console.warn 输出，待后续 IPC 扩展
+    // ── Rand_error 消费：有报告则写盘 + IPC 推送渲染层 ──
     const randReports = consumePendingReports();
     if (randReports.length > 0) {
       for (const r of randReports) {
         console.warn(`[RandError] ${r.type} ×${r.count} threshold reached — report written to memory/rand_error.md`);
+        // 通过 IPC 推送给渲染层
+        mainWindow.webContents.send(IpcChannel.RAND_ERROR_REPORT, {
+          type: r.type,
+          count: r.count,
+          threshold: r.threshold,
+          recentSamples: r.recentSamples,
+          suggestion: r.suggestion,
+          generatedAt: r.generatedAt,
+        });
       }
     }
 

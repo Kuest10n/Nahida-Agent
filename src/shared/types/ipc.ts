@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// IPC 6 通道枚举 —— preload 和 main 都引用这份，禁止各写各的
+// IPC 通道枚举 —— preload 和 main 都引用这份，禁止各写各的
 export enum IpcChannel {
   AGENT_CHAT = 'agent:chat',
   AGENT_MODEL_DELTA = 'agent:model-delta',
@@ -16,6 +16,7 @@ export enum IpcChannel {
   PERSONALITY_SWITCH = 'personality:switch',
   PERSONALITY_CREATE = 'personality:create',
   PERSONALITY_DELETE = 'personality:delete',
+  RAND_ERROR_REPORT = 'rand-error:report',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -176,6 +177,17 @@ export const personalityDeleteResultSchema = z.object({
 });
 export type PersonalityDeleteResultPayload = z.infer<typeof personalityDeleteResultSchema>;
 
+// ---------- rand-error:report（自主进化报告推送） ----------
+export const randErrorReportSchema = z.object({
+  type: z.enum(['A-OOC', 'B-bracket', 'C-mismatch', 'D-tool']),
+  count: z.number(),
+  threshold: z.number(),
+  recentSamples: z.array(z.string()),
+  suggestion: z.string(),
+  generatedAt: z.number(),
+});
+export type RandErrorReportPayload = z.infer<typeof randErrorReportSchema>;
+
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
   [IpcChannel.AGENT_CHAT]: agentChatSchema,
@@ -192,6 +204,7 @@ export const ipcSchemas = {
   [IpcChannel.PERSONALITY_SWITCH]: personalitySwitchSchema,
   [IpcChannel.PERSONALITY_CREATE]: personalityCreateSchema,
   [IpcChannel.PERSONALITY_DELETE]: personalityDeleteSchema,
+  [IpcChannel.RAND_ERROR_REPORT]: randErrorReportSchema,
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

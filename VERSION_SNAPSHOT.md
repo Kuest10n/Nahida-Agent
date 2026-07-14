@@ -219,7 +219,7 @@
 - [x] v0.9.3：多 API 动态择模 —— model-selector.ts 实现多端点管理、优先级路由、健康检查与熔断机制，支持 ollama + DeepSeek 云端双端点，TS 编译 0 错误
 
 ### 架构债
-- [ ] IPC 6 通道：rand-error 无专用通道（暂用 console.warn）
+- [x] IPC 6 通道：rand-error 专用通道已实现（IPCChannel.RAND_ERROR_REPORT + handlers.ts IPC 推送）
 - [x] cycleLog 持久化到 session.json（v0.8.3 已完成）
 - [x] git 已初始化（待首 commit）
 - [x] LICENSE + README 已创建

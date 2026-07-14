@@ -21,6 +21,7 @@ const LISTEN_CHANNELS = new Set<string>([
   IpcChannel.AGENT_STATE_CHANGE,
   IpcChannel.LIVE2D_ACTION,
   IpcChannel.TTS_CHUNK,
+  IpcChannel.RAND_ERROR_REPORT,
 ]);
 
 // 给渲染层暴露的 API
