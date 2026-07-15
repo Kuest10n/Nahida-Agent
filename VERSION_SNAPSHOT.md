@@ -230,6 +230,67 @@
 - [x] SSRF 防护增强：修复 IPv6 回环/ULA/link-local、0.0.0.0/8、CGNAT 100.64.0.0/10 绕过漏洞
 - [x] 熔断机制修复：review-layer.ts 熔断触发后允许重试，避免永久锁定
 - [x] 测试覆盖补充：
-  - builtin-ssrf.test.ts：10 个 SSRF 防护边界测试用例
+  - [x] builtin-ssrf.test.ts：10 个 SSRF 防护边界测试用例
   - session-store.test.ts：并发竞态测试（10 并发 × 100 消息）
   - guardrails.test.ts：3 个 JSON 修复边界测试用例
+
+---
+
+# VERSION_SNAPSHOT v0.9.4
+
+> 快照时间：2026-07-15
+> 代码版本：v0.9.4（本地化集成 —— node-llama-cpp + Python 环境管理 + GPT-SoVITS/RVC 本地服务）
+> 状态：当前版本
+
+---
+
+## 代码
+
+- commit: `0ab1018`
+- package.json: `0.9.4`
+- TS 编译：3/3 零错（main / preload / renderer）
+- 新增模块：
+  - node-llama-cpp 集成 ✅（local-llm.ts：直接加载 GGUF 模型，支持 GPU 加速，模型路径可配置）
+  - Python 环境管理 ✅（python-manager.ts：嵌入式 Python + 系统 Python 自动检测，服务启动管理）
+  - stream-sanitizer.ts ✅（流式输出清洗，剥离 `<think>` / `[emotion:xxx]` / `<tool_call>` 内部标签）
+  - resources/ 目录 ✅（统一管理本地模型和运行时资源：ollama/models、python、gpt-sovits）
+- 变更：
+  - config.ts：添加 useLocalLLM、localModelPath 配置项
+  - agent-core.ts：集成 sanitizeOutput 清洗逻辑
+  - handlers.ts：流式回调中集成 sanitizeOutput
+  - gpt-sovits-adapter.ts / rvc-bridge.ts：使用 python-manager 管理服务
+
+## 训练
+
+### 主模
+- 模型：`qwen3-8b-nahida`（ollama 本地）或 node-llama-cpp 直接加载 GGUF
+- 基模：Qwen/Qwen3-8B-Instruct
+- 模式：`/nothink`（日常）+ `/think`（深入）
+- num_ctx：4096
+- Modelfile：`modelfiles/qwen3-8b-nahida-v2.Modelfile`
+
+### 四审层
+- 审查模型：T-v3-1677-r32（1677 条，rank32）
+- 基模：Qwen/Qwen2.5-1.5B-Instruct
+- ollama 名：`qwen2.5-1.5b-review-lora-v3`
+- T-v2 归档：`docs/train-logs/T-v2-1602-r32/TRAIN_LOG.md`
+
+## 资源
+
+| 资源 | 路径 | 绑代码版本 | 状态 |
+|---|---|---|---|
+| RVC v0.3 | `assets/rvc/nahida_v0.3_100e.pth` | v0.5.2 | 主力 |
+| GPT-SoVITS | `F:/nahida/v4/纳西妲_ZH/` | v0.7.1 | 已闭环 |
+| Live2D | `assets/models/nahida/Nahida.model3.json` | v0.8.0 | 真模型 |
+| GGUF 模型（可选） | `resources/ollama/models/` | v0.9.4 | 待下载 |
+| 嵌入式 Python（可选） | `resources/python/` | v0.9.4 | 待配置 |
+
+## 已知 / 待办
+
+### 待完成（v1.0.0 前）
+- [ ] v1.0.0：Phase 1 完整闭环（代码+训练+导出+ollama+资源五合一快照）
+- [ ] 口型同步优化（rhubarb 集成）
+- [ ] RVC 独立模块集成测试
+
+### 废弃物待清
+- [ ] `modelfiles/qwen2.5-1.5b-review-lora-v2.Modelfile` → `.deprecated` 观察期已过，待删除

@@ -69,7 +69,7 @@ e:\Nahida agent\
 
 ### 环境要求
 - Node.js 18+
-- Ollama（本地模型推理）
+- Ollama（本地模型推理，可选，也可使用 node-llama-cpp 直接加载 GGUF）
 - Python 3.10+（GPT-SoVITS TTS，可选）
 - Git LFS（Live2D 模型文件）
 
@@ -98,7 +98,7 @@ cp .env.example .env
 # 编辑 .env 配置 ollama 地址、API key 等
 ```
 
-5. **启动 Ollama 服务**
+5. **启动 Ollama 服务（方式一：推荐）**
 ```bash
 ollama serve
 # 拉取模型
@@ -106,10 +106,24 @@ ollama pull qwen3-8b-nahida
 ollama pull qwen2.5-1.5b-review-lora-v3
 ```
 
-6. **启动 GPT-SoVITS（可选）**
+**或使用 node-llama-cpp 加载本地 GGUF（方式二：v0.9.4 新增）**
 ```bash
-# 参考 F:/nahida/v4/纳西妲_ZH/ 下的部署说明
+# 下载 GGUF 模型到 resources/ollama/models/
+# 在 .env 中配置：
+# NAHIDA_USE_LOCAL_LLM=true
+# NAHIDA_LOCAL_MODEL_PATH=./resources/ollama/models/qwen3-8b-nahida.gguf
+```
+
+6. **启动 GPT-SoVITS（可选，v0.9.4 支持自动管理）**
+```bash
+# 方式一：手动启动
 python api_v2.py -p 9880
+
+# 方式二：应用自动启动（需配置 Python 环境）
+# 在 .env 中配置：
+# NAHIDA_VOICE_ADAPTER=gpt-sovits
+# NAHIDA_GPTSOVITS_MODEL_DIR=./resources/gpt-sovits/models
+# NAHIDA_GPTSOVITS_REF_DIR=./resources/gpt-sovits/reference_audios
 ```
 
 7. **启动开发服务器**
@@ -135,7 +149,7 @@ npm run dev
 - **次版本号**：新功能模块 / 新能力
 - **修订号**：优化/修复/清理
 
-当前版本：v0.9.3（v0.9.x 系列）
+当前版本：v0.9.4（v0.9.x 系列）
 
 ## 开发规范
 
