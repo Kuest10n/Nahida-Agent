@@ -25,6 +25,9 @@ let modelInstance: any = null;
 let contextInstance: any = null;
 let currentModelPath: string | null = null;
 
+/** 加载锁 —— 并发请求时第一个去加载，后面的等 */
+let loadingPromise: Promise<void> | null = null;
+
 /**
  * 动态加载 node-llama-cpp
  *
@@ -71,6 +74,8 @@ function resolveModelPath(): string {
  *
  * 首次调用时加载，后续复用缓存实例。
  * 如果模型路径变化，会重新加载。
+ *
+ * 并发安全：多个请求同时调用时，第一个去加载，后面的等待同一个 Promise。
  */
 async function loadModel(modelPath: string): Promise<void> {
   await loadLlamaCpp();
@@ -85,33 +90,52 @@ async function loadModel(modelPath: string): Promise<void> {
     return;
   }
 
-  // 卸载旧模型
-  if (modelInstance) {
-    console.log('[LocalLLM] unloading previous model');
-    modelInstance = null;
-    contextInstance = null;
+  // 如果正在加载，等待加载完成
+  if (loadingPromise) {
+    await loadingPromise;
+    // 等完再检查一次（如果加载的是同一个路径就直接返回）
+    if (modelInstance && currentModelPath === modelPath) {
+      return;
+    }
+    // 如果等完发现路径不一样（中途换了模型），继续往下加载新的
   }
 
-  console.log(`[LocalLLM] loading model: ${modelPath}`);
+  // 设置加载锁
+  loadingPromise = (async () => {
+    // 卸载旧模型
+    if (modelInstance) {
+      console.log('[LocalLLM] unloading previous model');
+      modelInstance = null;
+      contextInstance = null;
+    }
+
+    console.log(`[LocalLLM] loading model: ${modelPath}`);
+
+    try {
+      // 加载模型（自动检测 GPU）
+      modelInstance = new LlamaModel({
+        modelPath,
+        useGPU: true,
+      });
+
+      // 创建推理上下文
+      contextInstance = new LlamaContext({
+        model: modelInstance,
+        contextSize: 4096,
+      });
+
+      currentModelPath = modelPath;
+      console.log('[LocalLLM] model loaded successfully');
+    } catch (err) {
+      console.error('[LocalLLM] failed to load model:', err);
+      throw err;
+    }
+  })();
 
   try {
-    // 加载模型（自动检测 GPU）
-    modelInstance = new LlamaModel({
-      modelPath,
-      useGPU: true, // 自动使用 CUDA/Metal（如果可用）
-    });
-
-    // 创建推理上下文
-    contextInstance = new LlamaContext({
-      model: modelInstance,
-      contextSize: 4096, // Qwen3-8B 默认上下文长度
-    });
-
-    currentModelPath = modelPath;
-    console.log('[LocalLLM] model loaded successfully');
-  } catch (err) {
-    console.error('[LocalLLM] failed to load model:', err);
-    throw err;
+    await loadingPromise;
+  } finally {
+    loadingPromise = null;
   }
 }
 

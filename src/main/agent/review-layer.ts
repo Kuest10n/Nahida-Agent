@@ -44,6 +44,10 @@ let reviewEnabled = true;
 let modelFailCount = 0;
 /** 熔断阈值：连续失败次数 */
 const FAIL_THRESHOLD = 5;
+/** 熔断冷却时间（毫秒）—— 熔断后过多久自动恢复 */
+const CIRCUIT_COOLDOWN_MS = 30_000;
+/** 熔断触发时间戳（0 = 未熔断） */
+let circuitTrippedAt = 0;
 
 /** 设置模型审查开关 */
 export function setReviewEnabled(enabled: boolean): void {
@@ -253,10 +257,16 @@ async function modelReview(
   sentence: string,
   opts?: ReviewOpts,
 ): Promise<DimResult> {
+  // 熔断检查
   if (modelFailCount >= FAIL_THRESHOLD) {
-    // 熔断触发后允许重试，避免永久锁定
-    modelFailCount = 0;
-    throw new Error('model review circuit breaker triggered');
+    // 冷却期过了 → 自动复位，放一个请求去试探
+    if (Date.now() - circuitTrippedAt > CIRCUIT_COOLDOWN_MS) {
+      console.log('[ReviewLayer] circuit breaker cooldown passed, resetting');
+      modelFailCount = 0;
+      circuitTrippedAt = 0;
+    } else {
+      throw new Error('model review circuit breaker triggered');
+    }
   }
 
   const instruction = buildDimInstruction(dim, sentence, opts);
@@ -283,10 +293,16 @@ async function modelReview(
 
   if (!response.ok) {
     modelFailCount++;
+    // 达到阈值 → 记录熔断时间
+    if (modelFailCount >= FAIL_THRESHOLD && circuitTrippedAt === 0) {
+      circuitTrippedAt = Date.now();
+      console.warn(`[ReviewLayer] circuit breaker tripped after ${modelFailCount} failures`);
+    }
     throw new Error(`ollama responded ${response.status}: ${await response.text()}`);
   }
 
   modelFailCount = 0;
+  circuitTrippedAt = 0;
 
   const data = await response.json();
   // /api/chat 返回格式：{ message: { content: "..." } }

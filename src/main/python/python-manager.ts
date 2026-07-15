@@ -29,6 +29,9 @@ interface PythonEnv {
 /** 单例 Python 环境 */
 let pythonEnv: PythonEnv | null = null;
 
+/** 运行中的服务进程表（按脚本路径索引） */
+const runningServices = new Map<string, ChildProcess>();
+
 /**
  * 解析 Python 路径（支持嵌入式和系统 Python）
  *
@@ -130,6 +133,11 @@ export function runPython(args: string[], cwd?: string): Promise<string> {
  *
  * 用于 GPT-SoVITS API、RVC WebUI 等需要持续运行的服务。
  *
+ * 进程管理：
+ *   - 同一脚本重复启动时，先杀旧进程再起新的（防泄漏）
+ *   - 进程结束自动从表中移除
+ *   - 调用 cleanupAllServices() 可一键清理所有服务
+ *
  * @param script Python 脚本路径
  * @param args 脚本参数
  * @param cwd 工作目录
@@ -141,6 +149,14 @@ export function startPythonService(
   cwd?: string,
 ): ChildProcess {
   const env = pythonEnv ?? { pythonPath: resolvePythonPath() };
+
+  // 同一脚本已在运行 → 先杀旧的
+  const existing = runningServices.get(script);
+  if (existing && !existing.killed) {
+    console.log(`[Python] stopping existing service: ${script}`);
+    existing.kill('SIGTERM');
+    runningServices.delete(script);
+  }
 
   console.log(`[Python] starting service: ${script} ${args.join(' ')}`);
 
@@ -159,9 +175,54 @@ export function startPythonService(
 
   proc.on('close', (code) => {
     console.log(`[Python:${script}] exited with code ${code}`);
+    runningServices.delete(script);
   });
 
+  proc.on('error', (err) => {
+    console.error(`[Python:${script}] error:`, err);
+    runningServices.delete(script);
+  });
+
+  runningServices.set(script, proc);
   return proc;
+}
+
+/**
+ * 停止指定 Python 服务
+ *
+ * @param script 脚本路径
+ * @returns 是否成功停止
+ */
+export function stopPythonService(script: string): boolean {
+  const proc = runningServices.get(script);
+  if (!proc || proc.killed) {
+    runningServices.delete(script);
+    return false;
+  }
+
+  console.log(`[Python] stopping service: ${script}`);
+  proc.kill('SIGTERM');
+  runningServices.delete(script);
+  return true;
+}
+
+/**
+ * 清理所有运行中的 Python 服务
+ *
+ * 应用退出时调用，防止僵尸进程。
+ */
+export function cleanupAllServices(): void {
+  let count = 0;
+  for (const [script, proc] of runningServices) {
+    if (!proc.killed) {
+      proc.kill('SIGTERM');
+      count++;
+    }
+  }
+  runningServices.clear();
+  if (count > 0) {
+    console.log(`[Python] cleaned up ${count} services`);
+  }
 }
 
 /**

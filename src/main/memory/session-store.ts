@@ -188,14 +188,8 @@ export function appendMessage(
   session.lastActivity = now;
   session.messages.push({ role, content, timestamp: now, cycleLog });
 
-  const existing = storeMutex.get(sessionId);
-  const next = (existing ?? Promise.resolve()).then(() => {
-    scheduleSave(sessionId);
-  }).catch(() => {
-    saveTimers.delete(sessionId);
-    storeMutex.delete(sessionId);
-  });
-  storeMutex.set(sessionId, next);
+  // debounce 写盘（scheduleSave 内部自己处理互斥锁）
+  scheduleSave(sessionId);
 }
 
 /**
@@ -252,18 +246,28 @@ function safeUnlink(filePath: string): void {
 
 /**
  * debounce 写盘：500ms 内多次追加合并为一次写入
+ *
+ * 注意：debounce 只负责"调度时机"，不负责"串行化"。
+ * 串行化由 saveSession 内部的 storeMutex 保证。
+ * 这样即使多个 appendMessage 并发，debounce 合并后只写一次，
+ * 且写的是最终的内存状态（不会丢数据）。
  */
 function scheduleSave(sessionId: string): void {
   const existing = saveTimers.get(sessionId);
   if (existing) clearTimeout(existing);
 
   const timer = setTimeout(() => {
-    try {
-      saveSession(sessionId);
-    } finally {
-      saveTimers.delete(sessionId);
-      storeMutex.delete(sessionId);
-    }
+    saveTimers.delete(sessionId);
+    // 用互斥锁串行化写盘 IO
+    const prev = storeMutex.get(sessionId) ?? Promise.resolve();
+    const next = prev.finally(() => saveSession(sessionId))
+      .finally(() => {
+        // 只有这是最后一个 Promise 时才清掉互斥锁
+        if (storeMutex.get(sessionId) === next) {
+          storeMutex.delete(sessionId);
+        }
+      });
+    storeMutex.set(sessionId, next);
   }, SAVE_DEBOUNCE_MS);
 
   saveTimers.set(sessionId, timer);

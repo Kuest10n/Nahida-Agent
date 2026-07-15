@@ -22,6 +22,39 @@ import { registerTools, type ToolDefinition, type ToolResult } from './registry'
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+// ── 安全配置：文件工具的路径白名单 ────────────────────────────
+//
+// 只允许访问项目根目录及其子目录，防止路径遍历攻击（../../etc/passwd 之类）。
+// 用 path.resolve() 解析后检查是否以白名单目录开头。
+
+/** 允许访问的目录列表（绝对路径） */
+function getAllowedDirs(): string[] {
+  const cwd = process.cwd();
+  return [
+    path.resolve(cwd),           // 项目根目录
+    path.resolve(cwd, 'memory'),  // 记忆目录
+    path.resolve(cwd, 'data'),    // 数据目录
+    path.resolve(cwd, 'feedback'),// 反馈目录
+  ];
+}
+
+/**
+ * 安全解析文件路径，检查是否在白名单内
+ *
+ * @returns 解析后的绝对路径，或 null（表示不在白名单内）
+ */
+function safeResolvePath(filePath: string): string | null {
+  const resolved = path.resolve(filePath);
+  const allowedDirs = getAllowedDirs();
+
+  const isAllowed = allowedDirs.some(dir => {
+    // 必须是 dir 本身或 dir 的子目录
+    return resolved === dir || resolved.startsWith(dir + path.sep);
+  });
+
+  return isAllowed ? resolved : null;
+}
+
 // ── 工具 1：clock（获取当前时间） ─────────────────────────────
 
 const clockTool: ToolDefinition = {
@@ -390,9 +423,18 @@ const fileReadTool: ToolDefinition = {
     const encoding = (params.encoding as BufferEncoding) ?? 'utf-8';
 
     try {
+      // 安全检查：路径白名单（防路径遍历）
+      const safePath = safeResolvePath(filePath);
+      if (!safePath) {
+        return {
+          ok: false,
+          data: '安全限制：只能访问项目目录内的文件',
+          latencyMs: Date.now() - startTime,
+        };
+      }
+
       // 安全检查：禁止读取敏感文件
-      const normalizedPath = path.normalize(filePath);
-      if (normalizedPath.includes('.env') || normalizedPath.includes('credentials')) {
+      if (safePath.includes('.env') || safePath.includes('credentials') || safePath.includes('.key')) {
         return {
           ok: false,
           data: '安全限制：禁止读取敏感文件',
@@ -400,12 +442,12 @@ const fileReadTool: ToolDefinition = {
         };
       }
 
-      const content = fs.readFileSync(normalizedPath, encoding);
+      const content = fs.readFileSync(safePath, encoding);
 
       return {
         ok: true,
         data: {
-          file_path: normalizedPath,
+          file_path: safePath,
           content,
           size: content.length,
         },
@@ -439,9 +481,18 @@ const fileWriteTool: ToolDefinition = {
     const append = (params.append as boolean) ?? false;
 
     try {
+      // 安全检查：路径白名单（防路径遍历）
+      const safePath = safeResolvePath(filePath);
+      if (!safePath) {
+        return {
+          ok: false,
+          data: '安全限制：只能写入项目目录内的文件',
+          latencyMs: Date.now() - startTime,
+        };
+      }
+
       // 安全检查：禁止写入敏感文件
-      const normalizedPath = path.normalize(filePath);
-      if (normalizedPath.includes('.env') || normalizedPath.includes('credentials')) {
+      if (safePath.includes('.env') || safePath.includes('credentials') || safePath.includes('.key')) {
         return {
           ok: false,
           data: '安全限制：禁止写入敏感文件',
@@ -450,22 +501,22 @@ const fileWriteTool: ToolDefinition = {
       }
 
       // 确保目录存在
-      const dir = path.dirname(normalizedPath);
+      const dir = path.dirname(safePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
 
       // 写入文件
       if (append) {
-        fs.appendFileSync(normalizedPath, content, 'utf-8');
+        fs.appendFileSync(safePath, content, 'utf-8');
       } else {
-        fs.writeFileSync(normalizedPath, content, 'utf-8');
+        fs.writeFileSync(safePath, content, 'utf-8');
       }
 
       return {
         ok: true,
         data: {
-          file_path: normalizedPath,
+          file_path: safePath,
           size: content.length,
           mode: append ? 'append' : 'overwrite',
         },
