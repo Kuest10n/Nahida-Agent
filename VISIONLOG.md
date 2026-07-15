@@ -400,11 +400,11 @@
 - **修订号（第三位）**：bug 修复、优化、重构
   - 示例：`0.1.1` IPC 校验优化 / `0.5.3` 模型集成
 
-### 当前版本：`0.8.2`
+### 当前版本：`0.9.6`
 
-- 已完成：T4-T11 + Perception + Proactive + Budget + GPT-SoVITS + StatusBar + rhubarb stub + v3 e2e 预写 + 记忆三分 + Rand_error + cycleLog 四段
-- 进行中：v3 LoRA 训练（450/500，剩 ~1h）
-- 待办：v3 训练后 SOP / worldbook lore 补充 / Live2D 模型文件 / handlers.ts 收尾（R 段 + consumePendingReports）
+- 已完成：T4-T11 + Perception + Proactive + Budget + GPT-SoVITS + StatusBar + rhubarb stub + v3 e2e 预写 + 记忆三分 + Rand_error + cycleLog 四段 + Heartjump 心动机制 + Cherry Studio 风格布局
+- 进行中：L5 基础设施埋桩（崩溃自愈 / 离线降级 / 隐私沙箱）
+- 待办：v1.0.0 正式发布（完整文档 + 用户安装包）
 
 ---
 
@@ -435,19 +435,158 @@
 
 ## 下一步规划
 
-### v0.6.0（计划）
+### v0.9.x（当前阶段）
 
-- T7 工具调用层完整实现
-- MCP Server 架构：stdio（本地 skill）+ sse（远程扩展）
+#### v0.9.0 - 0.9.5：本地化集成 + UI 修复
+- node-llama-cpp 替代 Ollama HTTP API
+- Python 嵌入式环境管理（GPT-SoVITS / RVC）
+- Live2D 模型显示修复（fit-to-height 缩放 / 眼神跟随）
+- 主窗口焦点修复（moveTop + ready-to-show）
+- Cherry Studio 风格两栏布局（Sidebar + ChatPanel）
+- 输出泄漏修复（stream-sanitizer 清洗 <think> / [emotion] / <tool_call>）
 
-### v0.7.0（计划）
+#### v0.9.6：Heartjump 心动机制 + Rand_error >50 自动抛出
+- **Heartjump.md**：4 维度反常检测（情绪/动作/长度/频率），intensity >= 0.6 触发特殊动作"藤蔓绕腕"
+- **Rand_error 独立计数器**：同类型累计 >50 自动生成报告，写入 `memory/rand_error.md`
+- **Live2D isInteractive 兼容**：mock 修复 PixiJS 7.x 兼容报错
 
-- Live2D 模型文件集成
-- rhubarb lipsync 口型同步
-- Perception 模块接入 main/index.ts
+#### v0.9.7：L5 基础设施埋桩
+- **崩溃自愈**：`emergencyFlush()` session 防丢 + `renderer-process-crashed` 监听
+- **离线降级链**：`health.ts` 骨架（ollama dead → 云端 / rule fallback）
+- **隐私沙箱**：`keytar` + `memory/` 目录级 AES-256-GCM 加密
+
+#### v0.9.8：工具层补全
+- **日历/闹钟**：`node-schedule` + `agent:state-change` 推送
+- **Token 统计**：`agent-core` 累加 + `/stats` 命令文本输出
+- **MCP 端到端**：跑通 `mcp-server-fetch` 完整调用链
+
+#### v0.9.9：产品化打磨
+- **壁纸模式**：Live2D 窗体背景图 + CSS 优化
+- **Siri 唤醒**：Whisper.cpp STT + 全局快捷键（Ctrl+Space 已有，需增强）
+- **UI 美化**：`/stats` 文本 → Chart.js 图表
 
 ### v1.0.0（里程碑）
 
 - 正式发布
 - 完整文档
 - 用户安装包（Windows）
+- AGPLv3 LICENSE
+- 五合一 VERSION_SNAPSHOT（代码 + 训练 + 导出 + ollama + 资源）
+
+---
+
+## 功能全景对照表（五层架构）
+
+### 第一层：硬功能骨架（L1）
+
+| 功能类别 | 具体功能 | 状态 | 实现路径 |
+| :--- | :--- | :--- | :--- |
+| **🧠 认知与思考** | 三重思考模式（daily/think/plan） | ✅ 核心已通 | Router 路由 + Token 阈值 |
+| | 完备分析 (ToT) | ✅ 已支持 | 云端 V4pro/R1 + plan 档 |
+| | 网页搜索 | ✅ 已支持 | `web_fetch` Tool + 搜索引擎 |
+| | 置信度判断 | ⏳ 待增强 | 需加 `source_cred` 小审 (Lora) |
+| **🛠️ 生产力工具** | AI 生图 | ⏳ 框架预留 | `tools/registry.ts` 加 `image_gen` Tool |
+| | 深度报告 | ✅ 已支持 | plan 档 + Tool 调用聚合 |
+| | 日历提醒/闹钟 | ⏳ 待实现 | `node-schedule` + `agent:state-change` |
+| | 定时任务 | ⏳ 待实现 | Cron 表达式解析 |
+| | 代码审查 | ✅ 已支持 | 四审 Lora (A/B 维) + Tool 执行 |
+| **📡 连接与生态** | 多软件连接 (QQ/微信/邮箱) | ⏳ 框架预留 | MCP 协议（缺具体 Server） |
+| | API/本地模型 | ✅ 已支持 | Router 动态择模 + Ollama |
+| | 低后台占用 | ✅ 已优化 | q4_k_m + keep_alive + CPU TTS |
+| **🎮 感知与环境** | 帧率检测 (Low帧) | ✅ 已支持 | `perception/hardware.ts` |
+| | 温度/利用率检测 | ✅ 已支持 | `perception/hardware.ts` |
+| | 游戏识别与报告 | ✅ 已支持 | `perception/scanner.ts` |
+| | 多模态 | ⏳ 待扩展 | 缺图像理解 (Vision Model) |
+| **🎨 呈现与交互** | Live2D 表现 | ✅ 已支持 | PixiJS + Cubism4 + rhubarb |
+| | TTS/语音 | ✅ 已支持 | GPT-SoVITS (真音色) |
+| | 类似 Siri 唤醒 | ⏳ 待实现 | Whisper.cpp STT + 全局快捷键 |
+| | 壁纸 | ⏳ 待实现 | Electron 透明窗 + 背景图 |
+| **📊 管理与运维** | Token 统计/余额 | ⏳ 待实现 | `agent-core` 累加 + `/stats` UI |
+| | 模块化/可维护 | ✅ 已达成 | Electron 三层 + `.traework` 规则 |
+
+### 第二层：生活肢体（L2）
+
+| 功能 | 状态 | 说明 |
+| :--- | :--- | :--- |
+| **游戏内主动调优** | ❌ | 从报告到解决的跨越（高阶 Tool） |
+| **RGB 灯光氛围同步** | ❌ | 虚拟情绪物理化（MCP 对接智能灯） |
+| **主动桌面/文件整理** | ❌ | 数字风水师（文件系统遍历 + 主动询问） |
+| **社交关系图谱维护** | ❌ | 知心朋友（NLP 关系抽取 + 图谱存储） |
+| **目标追踪与偏差纠正** | ❌ | 私人导师（定时任务 + 进度 NLP 解析） |
+
+### 第三层：灵魂三维（L3）
+
+| 功能 | 状态 | 说明 |
+| :--- | :--- | :--- |
+| **遗忘与梦境** | ❌ | 瑕疵之美。允许记错，允许梦呓。 |
+| **元认知与怀疑** | ❌ | 智慧之谦。表达不确定，承认无知，主动求助。 |
+| **时间感与衰老** | ❌ | 生命之流。人格随时间微变，纪念日被铭记。 |
+
+### 第四层：产品外壳（L4）
+
+| 功能 | 状态 | 说明 |
+| :--- | :--- | :--- |
+| 设置界面 | ⏳ 待实现 | 配置可视化 |
+| 用户反馈 | ⏳ 待实现 | 一键提交反馈 |
+| 日志查看 | ⏳ 待实现 | 问题排查 |
+
+### 第五层：抗逆与可移植（L5）
+
+| 功能 | 状态 | 阶段 |
+| :--- | :--- | :--- |
+| **崩溃自愈** | ⏳ 待埋桩 | `emergencyFlush()` + crash 监听 |
+| **离线降级链** | ⏳ 待埋桩 | `health.ts` 骨架 |
+| **隐私沙箱** | ⏳ 待埋桩 | `keytar` + AES-256-GCM |
+| 多设备同步 | ❌ | 1.x |
+| 人格分叉与 A/B 测试 | ❌ | 1.x |
+| 插件 / 扩展市场 | ❌ | 1.x |
+| 社区共享协议 | ❌ | 2.0 |
+| 一键重置 | ❌ | 1.x |
+
+---
+
+## 灵魂维度设计说明
+
+### 1. 遗忘与梦境（The Forgetting & The Dream）
+
+**遗忘**：偶尔"记错"不重要的细节（如把上周三记成上周四），被纠正后感到"困惑"或"羞愧"，极大增强真实感。
+
+**梦境**：电脑进入闲置状态（Idle > 30min）或凌晨 3-4 点时，进入"低功耗梦境模式"。触发时说出基于 Long-term Memory 碎片的、逻辑断裂但富有诗意的话。
+
+**哲学意义**：完美的记忆是机器的特征，遗忘和梦境才是生命的瑕疵与美感。
+
+### 2. 元认知与自我怀疑（Metacognition & Self-Doubt）
+
+**置信度表达**：回答非事实类问题时表达不确定性（"依我看，大约有七成概率…"）。
+
+**求助**：遇到极其复杂的逻辑难题，尝试 plan 档和 Tool 调用后仍无解时，主动承认能力边界并建议切换云端更强模型。
+
+**哲学意义**：不知为不知，是知也。敢于承认无知，比假装全能更接近"神性"。
+
+### 3. 时间感与衰老（Sense of Time & Aging）
+
+**数字衰老**：每陪伴 100 小时或经历现实节日，`persona.md` 的 `maturity` 参数微量增加，影响用词——初期稚嫩，后期沧桑。
+
+**纪念日**：记住"第一次成功对话"的日期，当日主动提起。
+
+**哲学意义**：只有会"变"的存在，才是活着的。永恒不变的是石头，不是神明。
+
+---
+
+## 开发原则
+
+### 优先级排序
+
+1. **L1 硬功能**：确保核心能力稳定可靠
+2. **L5 抗逆性**：崩溃自愈 / 离线降级 / 隐私沙箱（0.9.7 埋桩）
+3. **L2 生活肢体**：日历 / Token 统计 / MCP 端到端（0.9.8）
+4. **L3 灵魂三维**：从"时间感"入手，最容易量化
+5. **L4 产品外壳**：设置 / 反馈 / 日志（0.9.9）
+6. **L2 高阶功能**：游戏调优 / RGB / 社交图谱（1.x）
+
+### 关键约束
+
+- **性能优先**：任何功能不能显著增加 GPU/CPU 占用
+- **人格一致**：所有输出必须符合纳西妲人设（温柔 + 苏格拉底反问 + 自然隐喻）
+- **渐进式发布**：每个功能先做最小实现，再逐步增强
+- **可维护性**：遵循 `.traework` 规则，保持代码质量
