@@ -510,10 +510,35 @@
 
 **类型检查**：TS strict 模式 0 错误（主进程 + 渲染层 + preload）
 
-#### v0.9.9：产品化打磨
-- **壁纸模式**：Live2D 窗体背景图 + CSS 优化
-- **Siri 唤醒**：Whisper.cpp STT + 全局快捷键（Ctrl+Space 已有，需增强）
-- **UI 美化**：`/stats` 文本 → Chart.js 图表
+#### v0.9.9 ✅ 2026-07-15：L3 时间感与数字衰老
+
+**让她活着的最便宜的一行代码**——maturity 参数注入 system prompt，人格随时间微调。
+
+- **maturity.ts**：时间感与数字衰老模块
+  - maturity ∈ [0, 1]，30 天达到完全成熟
+  - 遗忘衰减：每天衰减 2%（长时间不交互缓慢下降）
+  - 持久化：`memory/maturity.json`，启动时加载，每次对话后更新
+  - 人格微调规则：
+    - maturity < 0.2：活泼好奇，多用"～""！"
+    - 0.2 < maturity < 0.6：温柔知性，语气适中
+    - maturity > 0.6：成熟稳重，智慧感，用词精炼
+  - 对应文件：`src/main/agent/maturity.ts`
+
+- **agent-core.ts 集成**
+  - `getSystemPrompt()` 注入成熟度参数：`[maturity:0.35] 你是一个成长中的纳西妲……`
+  - `generateResponse()` 结束时调用 `recordConversation(latencyMs)` 记录对话时长
+  - 对应文件：`src/main/agent/agent-core.ts`
+
+- **主进程初始化**：`initMaturity()` 在启动时加载历史数据
+
+**核心公式**（真的只有一行）：
+```typescript
+const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
+```
+
+**效果**：用户每天和她对话，30 天后能感受到她从"刚出生的小草"成长为"成熟的大慈树王"。
+
+**类型检查**：TS strict 模式 0 错误
 
 ### v1.0.0（里程碑）
 
@@ -745,6 +770,7 @@
 |---|---|---|
 | ✅ v0.9.7 | L5 抗逆埋桩 | emergencyFlush + health.ts + keytar 隐私沙箱 |
 | ✅ v0.9.8 | L4 产品外壳起步 | 设置界面（模型/感知/人格 Tab）+ 反馈界面（Ctrl+Shift+F） |
+| ✅ v0.9.9 | L3 时间感与数字衰老 | maturity 参数 + 30天成熟 + 遗忘衰减 + 人格微调 |
 | v1.0.0 | **正式发布** | 以上全部 + Token 统计折线图 + /stats 面板 + 完整文档 + 安装包 |
 
 ### v1.x（Phase 2）

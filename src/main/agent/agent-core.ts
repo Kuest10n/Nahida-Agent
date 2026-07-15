@@ -27,6 +27,7 @@ import { getCurrentPersonalityId, getPersonalityDirectory } from '../memory/pers
 import type { Router } from '../router/router';
 import type { ModelTier, DegradeDecision } from '../router/degrade-strategy';
 import type { RouteIntent } from '../router/router';
+import { getMaturityPrompt, recordConversation, initMaturity } from './maturity';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
@@ -91,18 +92,26 @@ function getSystemPrompt(): string {
   const personalityDir = getPersonalityDirectory(personalityId);
   const sohaPath = path.join(personalityDir, 'SOHA.md');
 
+  let basePrompt = '';
+
   if (fs.existsSync(sohaPath)) {
     const content = fs.readFileSync(sohaPath, 'utf-8').trim();
     if (content) {
-      return extractCoreRules(content);
+      basePrompt = extractCoreRules(content);
     }
   }
 
-  if (personalityId === 'nahida') {
-    return buildDefaultNahidaPrompt();
+  if (!basePrompt) {
+    if (personalityId === 'nahida') {
+      basePrompt = buildDefaultNahidaPrompt();
+    } else {
+      basePrompt = buildDefaultPersonalityPrompt(personalityId);
+    }
   }
 
-  return buildDefaultPersonalityPrompt(personalityId);
+  // 注入成熟度参数（L3 时间感与数字衰老）
+  const maturityPrompt = getMaturityPrompt();
+  return `${maturityPrompt}\n\n${basePrompt}`;
 }
 
 function extractCoreRules(sohaContent: string): string {
@@ -394,12 +403,17 @@ export async function generateResponse(
     // 记录助手回复到历史（v0.8.3: 附带 cycleLog）
     appendHistory(sessionId, { role: 'assistant', content: fullText }, cycleLog);
 
+    const latencyMs = Date.now() - startTime;
+
+    // L3: 记录对话时长，更新成熟度（时间感与数字衰老）
+    recordConversation(latencyMs);
+
     return {
       content: fullText,
       tier,
       degraded: degradeDecision.degraded,
       degradeReason: degradeDecision.reason,
-      latencyMs: Date.now() - startTime,
+      latencyMs,
       cycleLog, // R 段由 handlers.ts 审查后追加
     };
   } catch (err) {
@@ -413,12 +427,17 @@ export async function generateResponse(
     // 仍然通过流式回调推送（让 UI 能看到）
     onDelta(fallback, true);
 
+    const latencyMs = Date.now() - startTime;
+
+    // L3: 即使失败也记录对话时长
+    recordConversation(latencyMs);
+
     return {
       content: fallback,
       tier: 'local',
       degraded: true,
       degradeReason: 'unavailable',
-      latencyMs: Date.now() - startTime,
+      latencyMs,
       cycleLog, // 可能只有 T/F 段（Tk 前就炸了）
     };
   }

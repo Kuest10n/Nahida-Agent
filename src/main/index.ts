@@ -13,7 +13,9 @@ import { registerShortcuts, unregisterShortcuts } from './tray/shortcuts';
 import { initPersonalityManager } from './memory/personality-manager';
 import { emergencyFlush, loadSessions } from './memory/session-store';
 import { healthMonitor, createHttpProbe, createNetworkProbe } from './health/health';
-import { getConfig, getOllamaBaseUrl } from './config/config';
+import { getConfig, getOllamaBaseUrl, loadUserConfigFromDisk } from './config/config';
+import { initMaturity } from './agent/maturity';
+import { cleanupAllServices } from './python/python-manager';
 
 // 单例窗口管理器 + Perception 模块 + 主动开口 reviewer
 const windowMgr = new WindowManager();
@@ -161,6 +163,8 @@ app.whenReady().then(() => {
 
   initPersonalityManager();
 
+  initMaturity();
+
   void warmupModel();
 
   if (process.env.VITE_DEV_SERVER_URL && windowMgr.mainWindow) {
@@ -187,6 +191,8 @@ app.on('window-all-closed', () => {
   unregisterShortcuts();
   // 退出前最后再刷一次
   emergencyFlush();
+  // 清理所有 Python 子进程（防僵尸）
+  cleanupAllServices();
   if (process.platform !== 'darwin') {
     app.quit();
   }
