@@ -1,0 +1,21 @@
+{
+  "current": "nahida",
+  "personalities": [
+    {
+      "id": "nahida",
+      "name": "nahida",
+      "displayName": "纳西妲",
+      "description": "尘世七执政中的草神——魔神名布耶尔（Buer）",
+      "default": true,
+      "createdAt": 1784106635156
+    },
+    {
+      "id": "ti-bao",
+      "name": "ti-bao",
+      "displayName": "缇宝",
+      "description": "来自星际和平公司的实习生，元气少女",
+      "default": false,
+      "createdAt": 1784106635156
+    }
+  ]
+}
