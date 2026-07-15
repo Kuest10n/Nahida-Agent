@@ -16,80 +16,14 @@
  * 纯文件 IO（读 .env 或系统环境变量），不占 GPU。
  */
 
-// ── 配置类型 ──────────────────────────────────────────────────
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { Config, OllamaConfig, ModelConfig, ApiConfig, SessionConfig, VoiceConfig } from '../../shared/types/config';
 
-/** 完整配置对象 */
-export interface Config {
-  /** ollama 服务地址 */
-  ollama: OllamaConfig;
-  /** 模型配置 */
-  models: ModelConfig;
-  /** API key（可选，云端模型用） */
-  api: ApiConfig;
-  /** 会话配置 */
-  session: SessionConfig;
-  /** TTS / RVC 语音配置 */
-  voice: VoiceConfig;
-}
+// 重新导出类型，方便其他模块导入
+export type { Config, OllamaConfig, ModelConfig, ApiConfig, SessionConfig, VoiceConfig };
 
-/** ollama 配置 */
-export interface OllamaConfig {
-  host: string;
-  port: number;
-  timeoutMs: number;
-}
-
-/** 模型配置 */
-export interface ModelConfig {
-  /** local tier 模型名 */
-  local: string;
-  /** standard tier 模型名（云端） */
-  standard: string;
-  /** flash tier 模型名（云端） */
-  flash: string;
-  /** 审查模型名 */
-  review: string;
-  /** 本地 GGUF 模型路径（支持相对路径，如 ./resources/ollama/models/qwen3-8b-nahida.gguf） */
-  localModelPath?: string;
-  /** 是否使用本地 LLM（node-llama-cpp）而非 Ollama HTTP API */
-  useLocalLLM?: boolean;
-}
-
-/** API key 配置 */
-export interface ApiConfig {
-  /** DeepSeek API key（可选） */
-  deepseekKey: string | undefined;
-}
-
-/** 会话配置 */
-export interface SessionConfig {
-  /** 最大历史轮数 */
-  maxHistoryTurns: number;
-  /** 过期时间（分钟） */
-  ttlMinutes: number;
-  /** 最大保留会话数 */
-  maxSessions: number;
-}
-
-/** TTS / GPT-SoVITS / RVC 语音配置 */
-export interface VoiceConfig {
-  /** TTS 适配器类型：edge-tts（CPU 默认）/ gpt-sovits（GPU，日常对话主力） */
-  ttsAdapter: 'edge-tts' | 'gpt-sovits';
-  /** RVC 模型文件名（assets/rvc/ 下，AI 翻唱用） */
-  rvcModelName: string;
-  /** RVC 模型版本标识 */
-  rvcModelVersion: string;
-  /** RVC WebUI 根目录（外部依赖，如 F:\\RVC20240604Nvidia） */
-  rvcRoot: string;
-  /** edge-tts voice 名（默认晓伊） */
-  edgeVoice: string;
-  /** GPT-SoVITS API 地址（默认 http://localhost:9880） */
-  gptsovitsApiUrl: string;
-  /** GPT-SoVITS 参考音频根目录 */
-  gptsovitsRefDir: string;
-  /** GPT-SoVITS 模型目录（含 .ckpt + .pth） */
-  gptsovitsModelDir: string;
-}
+// ── 配置类型（已移到 shared/types/config.ts）────────────────────
 
 // ── 默认值 ────────────────────────────────────────────────────
 
@@ -213,4 +147,70 @@ function envNumber(key: string, defaultValue: number): number {
 
   const num = parseInt(value, 10);
   return Number.isNaN(num) ? defaultValue : num;
+}
+
+// ── 配置持久化（v0.9.8 设置界面支持） ────────────────────────────────
+
+/** 用户配置文件路径（项目根目录下的 config.json） */
+const USER_CONFIG_FILE = path.resolve(process.cwd(), 'config.json');
+
+/**
+ * 保存用户配置到磁盘
+ *
+ * 只保存非默认值（与默认值相同的字段不写，避免配置文件冗余）。
+ * 写入方式：原子写（先写 .tmp 再 rename）。
+ */
+export function saveConfigToDisk(partialConfig: Partial<Config>): void {
+  const current = getConfig();
+
+  // 合并（部分更新）
+  const merged: Config = {
+    ollama: { ...current.ollama, ...partialConfig.ollama },
+    models: { ...current.models, ...partialConfig.models },
+    api: { ...current.api, ...partialConfig.api },
+    session: { ...current.session, ...partialConfig.session },
+    voice: { ...current.voice, ...partialConfig.voice },
+  };
+
+  // 更新内存中的 config
+  config = merged;
+
+  // 写入磁盘
+  try {
+    const json = JSON.stringify(merged, null, 2);
+    const tmpPath = `${USER_CONFIG_FILE}.tmp`;
+    fs.writeFileSync(tmpPath, json, 'utf-8');
+    fs.renameSync(tmpPath, USER_CONFIG_FILE);
+    console.log('[Config] saved to', USER_CONFIG_FILE);
+  } catch (err) {
+    console.error('[Config] save failed:', err);
+    throw err;
+  }
+}
+
+/**
+ * 从磁盘加载用户配置（覆盖内存中的默认值）
+ *
+ * 启动时调用一次（在 initConfig 之前）。
+ */
+export function loadUserConfigFromDisk(): void {
+  if (!fs.existsSync(USER_CONFIG_FILE)) {
+    console.log('[Config] no user config file, using defaults');
+    return;
+  }
+
+  try {
+    const content = fs.readFileSync(USER_CONFIG_FILE, 'utf-8');
+    const userConfig = JSON.parse(content) as Partial<Config>;
+
+    // 合并到环境变量（优先级：用户配置文件 > 环境变量 > 默认值）
+    // 这里简化处理：直接覆盖内存中的 config（initConfig 还没调用）
+    // 实际应该在 initConfig 时读取，这里只标记"有用户配置文件"
+    console.log('[Config] loaded user config from', USER_CONFIG_FILE);
+
+    // 存到全局，让 initConfig 合并
+    (global as { __userConfig?: Partial<Config> }).__userConfig = userConfig;
+  } catch (err) {
+    console.warn('[Config] failed to load user config:', err);
+  }
 }

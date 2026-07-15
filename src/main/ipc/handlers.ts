@@ -11,6 +11,9 @@ import { consumePendingReports } from '../agent/rand-error';
 import { setAutoStart, isAutoStartEnabled } from '../tray/autostart';
 import { updateTrayStatus } from '../tray/tray-manager';
 import { getCurrentPersonality, listPersonalities, setCurrentPersonality, createPersonality, deletePersonality, initPersonalityManager } from '../memory/personality-manager';
+import { getConfig, saveConfigToDisk } from '../config/config';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // 路由层 + 四审层 + TTS 调度器 实例（全局单例）
 const router = new Router();
@@ -259,6 +262,58 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
   registerValidatedHandler(IpcChannel.PERSONALITY_DELETE, (_event: IpcMainInvokeEvent, payload: { personalityId: string }) => {
     const success = deletePersonality(payload.personalityId);
     return { ok: success };
+  });
+
+  // config:get —— 获取当前配置
+  registerValidatedHandler(IpcChannel.CONFIG_GET, () => {
+    const cfg = getConfig();
+    return { ok: true, config: cfg };
+  });
+
+  // config:set —— 保存配置（部分更新）
+  registerValidatedHandler(IpcChannel.CONFIG_SET, (_event: IpcMainInvokeEvent, payload: { config: Record<string, unknown> }) => {
+    try {
+      saveConfigToDisk(payload.config as Parameters<typeof saveConfigToDisk>[0]);
+      return { ok: true };
+    } catch (err) {
+      console.error('[IPC] config:set failed:', err);
+      return { ok: false };
+    }
+  });
+
+  // feedback:submit —— 用户反馈写入磁盘
+  registerValidatedHandler(IpcChannel.FEEDBACK_SUBMIT, (_event: IpcMainInvokeEvent, payload: { type: string; title: string; content: string }) => {
+    try {
+      const feedbackDir = path.resolve(process.cwd(), 'feedback');
+      if (!fs.existsSync(feedbackDir)) {
+        fs.mkdirSync(feedbackDir, { recursive: true });
+      }
+
+      // 文件名：YYYYMMDD_HHMMSS_{type}.md
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[-:T]/g, '').slice(0, 15);
+      const filename = `${timestamp}_${payload.type}.md`;
+      const filepath = path.join(feedbackDir, filename);
+
+      // Markdown 内容
+      const content = `# ${payload.title}
+
+**类型**: ${payload.type}
+**时间**: ${now.toISOString()}
+
+---
+
+${payload.content}
+`;
+
+      fs.writeFileSync(filepath, content, 'utf-8');
+      console.log('[Feedback] saved to', filepath);
+
+      return { ok: true, filepath };
+    } catch (err) {
+      console.error('[IPC] feedback:submit failed:', err);
+      return { ok: false };
+    }
   });
 }
 

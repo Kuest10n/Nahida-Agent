@@ -3,9 +3,12 @@ import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { StatusBar } from './StatusBar';
 import { Sidebar } from './Sidebar';
+import { SettingsModal } from './SettingsModal';
+import { FeedbackModal } from './FeedbackModal';
 import type { Message } from './types';
 import { generateMessageId, extractActionTag } from './types';
 import { IpcChannel } from '../../shared/types/ipc';
+import type { Config } from '../../shared/types/config';
 
 interface Personality {
   id: string;
@@ -36,6 +39,19 @@ export const ChatPanel: React.FC = () => {
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [currentPersonality, setCurrentPersonality] = useState<Personality | null>(null);
   const [personalities, setPersonalities] = useState<Personality[]>([]);
+  // 设置模态框状态
+  const [showSettings, setShowSettings] = useState(false);
+  const [config, setConfig] = useState<Config | null>(null);
+  // 反馈模态框状态
+  const [showFeedback, setShowFeedback] = useState(false);
+
+  // 监听 Ctrl+Shift+F 快捷键（主进程推送）
+  useEffect(() => {
+    const cleanup = window.nahidaAPI?.on('feedback:open', () => {
+      setShowFeedback(true);
+    });
+    return () => { cleanup?.(); };
+  }, []);
 
   // 加载人格列表和当前人格
   useEffect(() => {
@@ -167,6 +183,31 @@ export const ChatPanel: React.FC = () => {
     }]);
   }, []);
 
+  // 打开设置
+  const handleOpenSettings = useCallback(async () => {
+    try {
+      const res = await window.nahidaAPI?.invoke('config:get', {}) as { ok: boolean; config?: Config } | undefined;
+      if (res && res.ok && res.config) {
+        setConfig(res.config);
+      }
+      setShowSettings(true);
+    } catch (err) {
+      console.error('[ChatPanel] get config failed:', err);
+      setShowSettings(true); // 依然打开，只是配置可能为空
+    }
+  }, []);
+
+  // 保存配置
+  const handleSaveConfig = useCallback(async (newConfig: Partial<Config>) => {
+    try {
+      await window.nahidaAPI?.invoke('config:set', { config: newConfig });
+      setConfig(prev => prev ? { ...prev, ...newConfig } : null);
+    } catch (err) {
+      console.error('[ChatPanel] save config failed:', err);
+      throw err;
+    }
+  }, []);
+
   return (
     <div
       style={{
@@ -185,6 +226,7 @@ export const ChatPanel: React.FC = () => {
         onSwitchPersonality={handleSwitchPersonality}
         onClearChat={handleClearChat}
         onShowStats={handleShowStats}
+        onOpenSettings={handleOpenSettings}
       />
 
       {/* 右侧主区 */}
@@ -219,6 +261,20 @@ export const ChatPanel: React.FC = () => {
         {/* 输入栏 */}
         <InputBar onSend={handleSend} disabled={isStreaming} />
       </div>
+
+      {/* 设置模态框 */}
+      {showSettings && (
+        <SettingsModal
+          config={config}
+          onSave={handleSaveConfig}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* 反馈模态框 */}
+      {showFeedback && (
+        <FeedbackModal onClose={() => setShowFeedback(false)} />
+      )}
     </div>
   );
 };

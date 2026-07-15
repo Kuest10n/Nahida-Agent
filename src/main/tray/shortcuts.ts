@@ -1,4 +1,4 @@
-import { globalShortcut, BrowserWindow } from 'electron';
+import { globalShortcut, BrowserWindow, ipcMain } from 'electron';
 
 export interface ShortcutOptions {
   mainWindow: BrowserWindow;
@@ -6,6 +6,7 @@ export interface ShortcutOptions {
 }
 
 const DEFAULT_SHORTCUT = 'Ctrl+Space';
+const FEEDBACK_SHORTCUT = 'Ctrl+Shift+F';
 
 let registered = false;
 
@@ -13,9 +14,10 @@ export function registerShortcuts(options: ShortcutOptions): void {
   if (registered) {
     unregisterShortcuts();
   }
-  
-  const { mainWindow, live2dWindow } = options;
-  
+
+  const { mainWindow } = options;
+
+  // Ctrl+Space —— 显示/隐藏主窗口
   const toggleMainWindow = globalShortcut.register(DEFAULT_SHORTCUT, () => {
     if (mainWindow.isVisible()) {
       mainWindow.hide();
@@ -24,13 +26,24 @@ export function registerShortcuts(options: ShortcutOptions): void {
       mainWindow.focus();
     }
   });
-  
+
   if (!toggleMainWindow) {
     console.warn('[Shortcut] failed to register Ctrl+Space (may be in use)');
   }
-  
+
+  // Ctrl+Shift+F —— 打开反馈窗口
+  const openFeedback = globalShortcut.register(FEEDBACK_SHORTCUT, () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('feedback:open', {});
+    }
+  });
+
+  if (!openFeedback) {
+    console.warn('[Shortcut] failed to register Ctrl+Shift+F (may be in use)');
+  }
+
   registered = true;
-  console.log('[Shortcut] shortcuts registered:', DEFAULT_SHORTCUT);
+  console.log('[Shortcut] shortcuts registered:', DEFAULT_SHORTCUT, FEEDBACK_SHORTCUT);
 }
 
 export function unregisterShortcuts(): void {

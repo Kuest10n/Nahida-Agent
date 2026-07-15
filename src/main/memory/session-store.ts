@@ -94,6 +94,9 @@ export function loadSessions(): void {
       return;
     }
 
+    // 先从紧急备份恢复（上次崩了的话）
+    recoverFromEmergency();
+
     const now = Date.now();
     const files = fs.readdirSync(SESSIONS_DIR)
       .filter(f => f.endsWith('.json'))
@@ -302,4 +305,97 @@ export function resetSessionStore(): void {
   saveTimers.clear();
   store.clear();
   initialized = false;
+}
+
+// ── 紧急写盘（崩溃自愈）────────────────────────────────────────
+//
+// 在渲染进程崩溃、主进程退出等紧急场景下调用。
+// 跳过 debounce，立即把所有待写的 session 刷到磁盘。
+// 同步执行，确保在进程退出前完成 IO。
+
+/**
+ * 紧急写盘：把所有内存中的 session 立即刷到磁盘
+ *
+ * 跳过 debounce 和互斥锁，同步写入，用于崩溃前最后一搏。
+ * 只写 .tmp 文件（不 rename），避免中途崩了破坏主文件；
+ * 下次启动时 loadSessions() 会自动恢复 .tmp 文件。
+ */
+export function emergencyFlush(): number {
+  if (!initialized) return 0;
+
+  let flushed = 0;
+
+  // 清掉所有 pending 定时器（没用了）
+  for (const timer of saveTimers.values()) clearTimeout(timer);
+  saveTimers.clear();
+  storeMutex.clear();
+
+  try {
+    if (!fs.existsSync(SESSIONS_DIR)) {
+      fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    }
+
+    for (const [sessionId, session] of store) {
+      try {
+        const filePath = path.join(SESSIONS_DIR, `${sessionId}.json`);
+        const tmpPath = `${filePath}.emergency`;
+        // 只写 .emergency，不 rename —— 崩一半也不破坏已有的好文件
+        fs.writeFileSync(tmpPath, JSON.stringify(session, null, 2), 'utf-8');
+        flushed++;
+      } catch {
+        // 单个失败不影响其他
+      }
+    }
+
+    console.warn(`[SessionStore] emergencyFlush: flushed ${flushed} sessions (crash recovery)`);
+  } catch (err) {
+    console.error('[SessionStore] emergencyFlush failed:', err);
+  }
+
+  return flushed;
+}
+
+/**
+ * 从紧急备份恢复：启动时扫描 .emergency 文件，与主文件对比取新的
+ *
+ * 在 loadSessions() 内部调用，外部不用关心。
+ */
+function recoverFromEmergency(): void {
+  if (!fs.existsSync(SESSIONS_DIR)) return;
+
+  try {
+    const files = fs.readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.emergency'));
+    let recovered = 0;
+
+    for (const tmpFile of files) {
+      const tmpPath = path.join(SESSIONS_DIR, tmpFile);
+      const mainPath = tmpPath.replace(/\.emergency$/, '');
+
+      try {
+        const tmpMtime = fs.statSync(tmpPath).mtimeMs;
+        let mainMtime = 0;
+        if (fs.existsSync(mainPath)) {
+          mainMtime = fs.statSync(mainPath).mtimeMs;
+        }
+
+        // 紧急备份比主文件新 → 用备份替换主文件
+        if (tmpMtime > mainMtime) {
+          fs.renameSync(tmpPath, mainPath);
+          recovered++;
+        } else {
+          // 主文件更新 → 删备份
+          fs.unlinkSync(tmpPath);
+        }
+      } catch {
+        // 单个失败跳过
+        try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+      }
+    }
+
+    if (recovered > 0) {
+      console.warn(`[SessionStore] recovered ${recovered} sessions from emergency backup`);
+    }
+  } catch {
+    // 恢复失败不影响启动
+  }
 }

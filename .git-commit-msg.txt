@@ -1,12 +1,21 @@
-fix: 安全修复 + 测试覆盖补充
+fix: v0.9.6 Heartjump + Rand_error >50 + isInteractive
 
-安全修复：
-- SSRF 防护增强：修复 IPv6 回环/ULA/link-local、0.0.0.0/8、CGNAT 100.64.0.0/10 绕过漏洞（builtin.ts isSafeUrl）
-- 熔断机制修复：review-layer.ts 熔断触发后允许重试，避免永久锁定
+1. Heartjump.md 心动机制
+   - 新建 heartjump.ts：4 维度反常检测（情绪/动作/长度/频率）
+   - 触发条件：intensity >= 0.6
+   - 联动：emotion.score 升级 + 触发特殊动作"藤蔓绕腕"
+   - 持久化：写入 memory/heartjump.md
 
-测试覆盖补充：
-- builtin-ssrf.test.ts：10 个 SSRF 防护边界测试用例（IPv4/IPv6 私网、回环、ULA、link-local、CGNAT、0.0.0.0/8）
-- session-store.test.ts：并发竞态测试（10 并发 × 100 消息，验证无丢失无重复）
-- guardrails.test.ts：3 个 JSON 修复边界测试用例（混合引号、嵌套对象、数组尾逗号）
+2. Rand_error >50 自动抛出
+   - 新增独立计数器 errorCounts（不受报告后清理影响）
+   - >=50 触发 generateReport + pendingReports 队列
+   - getErrorCounts() 返回真实累计值
 
-TS 编译：0 错误
+3. Live2D isInteractive 修复
+   - model.isInteractive = () => true mock
+   - 消除 PixiJS 7.x 兼容报错
+
+4. 界面美化收尾
+   - Cherry Studio 风格两栏布局（Sidebar + ChatPanel）
+   - 草绿渐变 + 玻璃拟态标题栏
+   - 60px 折叠 / 220px 展开侧边栏

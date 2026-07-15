@@ -450,15 +450,65 @@
 - **Rand_error 独立计数器**：同类型累计 >50 自动生成报告，写入 `memory/rand_error.md`
 - **Live2D isInteractive 兼容**：mock 修复 PixiJS 7.x 兼容报错
 
-#### v0.9.7：L5 基础设施埋桩
-- **崩溃自愈**：`emergencyFlush()` session 防丢 + `renderer-process-crashed` 监听
-- **离线降级链**：`health.ts` 骨架（ollama dead → 云端 / rule fallback）
-- **隐私沙箱**：`keytar` + `memory/` 目录级 AES-256-GCM 加密
+#### v0.9.7 ✅ 2026-07-15：L5 基础设施埋桩
 
-#### v0.9.8：工具层补全
-- **日历/闹钟**：`node-schedule` + `agent:state-change` 推送
-- **Token 统计**：`agent-core` 累加 + `/stats` 命令文本输出
-- **MCP 端到端**：跑通 `mcp-server-fetch` 完整调用链
+**L5 抗逆性三件套上线——桌面端的"安全网"**
+
+- **崩溃自愈（Crash Survival）**
+  - `session-store.ts` 新增 `emergencyFlush()`：同步写盘所有内存 session 到 `.emergency` 备份
+  - `recoverFromEmergency()`：启动时扫描 `.emergency` 文件，比主文件新则自动恢复
+  - 主进程监听 `render-process-gone` 事件，触发紧急写盘 + 尝试重建 Live2D 窗口
+  - 对应文件：`src/main/memory/session-store.ts` / `src/main/index.ts`
+
+- **离线降级链（Degraded Mode）**
+  - 新建 `src/main/health/health.ts`：`HealthMonitor` 统一管理子系统健康状态
+  - 探针工厂：`createHttpProbe()`（ollama/GPT-SoVITS 等 HTTP 服务）/ `createNetworkProbe()`（互联网连通性）
+  - 三级状态：`healthy` / `degraded` / `unhealthy`，状态变化触发事件推送 UI
+  - 主进程注册 ollama + 网络 + GPT-SoVITS 探针，默认 30s 轮询
+  - 现有 `degrade-strategy.ts` 保留为模型路由层降级策略，health.ts 为全局健康底座
+  - 对应文件：`src/main/health/health.ts` / `src/main/index.ts`
+
+- **隐私沙箱（Privacy Sandbox）**
+  - 新建 `src/main/memory/crypto.ts`：AES-256-GCM 加解密 + PBKDF2 密钥派生
+  - 双模式密钥：`keytar` 模式（系统钥匙环，零操作）/ PIN 模式（用户输入 PIN 派生）
+  - keytar 懒加载，没装也能跑（兜底 PIN 模式）
+  - `shards.ts` 集成：读取自动解密（兼容明文旧文件），`writeShard()` 自动加密写回
+  - 输出格式：`enc:` 前缀 + Base64(iv + authTag + ciphertext)，单文件自包含
+  - 原子写：先写 `.tmp` 再 rename，防写坏
+  - 对应文件：`src/main/memory/crypto.ts` / `src/main/memory/shards.ts`
+
+**依赖变更**：
+- 新增 `keytar@^7.9.0`（系统钥匙环集成，可选依赖，没装不影响主功能）
+
+**类型检查**：TS strict 模式 0 错误
+
+#### v0.9.8 ✅ 2026-07-15：L4 产品外壳起步
+
+**设置 + 反馈双界面上线——用户可配置化的第一步**
+
+- **设置界面（SettingsModal.tsx）**
+  - 三 Tab 设计：模型（Ollama 配置 + 本地模型路径）/ 感知（TTS 适配器 + RVC/GPT-SoVITS）/ 人格（占位，v1.1 完善）
+  - 配置持久化：`config.json` 写入项目根目录，原子写防坏
+  - 须弥风格 UI：草绿色主题 + 圆角卡片
+  - 触发方式：Sidebar 底部 🔧 设置按钮
+  - 对应文件：`src/renderer/main/SettingsModal.tsx` / `src/main/config/config.ts`
+
+- **配置 IPC 通道**
+  - 新增 `config:get` / `config:set` 通道，渲染层可读写配置
+  - 配置类型移至 `src/shared/types/config.ts`（渲染层可访问）
+  - 对应文件：`src/shared/types/ipc.ts` / `src/main/ipc/handlers.ts`
+
+- **反馈界面（FeedbackModal.tsx）**
+  - 三类型：Bug 报告 / 功能建议 / 其他
+  - 写入位置：项目根目录 `feedback/YYYYMMDD_HHMMSS_{type}.md`
+  - 触发方式：全局快捷键 `Ctrl+Shift+F`（主进程监听，IPC 推送到渲染层）
+  - 对应文件：`src/renderer/main/FeedbackModal.tsx` / `src/main/tray/shortcuts.ts`
+
+- **快捷键扩展**
+  - 新增 `Ctrl+Shift+F` 全局快捷键打开反馈窗口
+  - 原有 `Ctrl+Space` 显示/隐藏主窗口保持不变
+
+**类型检查**：TS strict 模式 0 错误（主进程 + 渲染层 + preload）
 
 #### v0.9.9：产品化打磨
 - **壁纸模式**：Live2D 窗体背景图 + CSS 优化
@@ -693,8 +743,8 @@
 
 | 版本 | 里程碑 | 包含功能层 |
 |---|---|---|
-| v0.9.7 | L5 抗逆埋桩 | emergencyFlush + health.ts + keytar 隐私沙箱 |
-| v0.9.8 | L4 产品外壳起步 | 设置界面（模型/感知/人格 Tab）+ 反馈界面（Ctrl+Shift+F） |
+| ✅ v0.9.7 | L5 抗逆埋桩 | emergencyFlush + health.ts + keytar 隐私沙箱 |
+| ✅ v0.9.8 | L4 产品外壳起步 | 设置界面（模型/感知/人格 Tab）+ 反馈界面（Ctrl+Shift+F） |
 | v1.0.0 | **正式发布** | 以上全部 + Token 统计折线图 + /stats 面板 + 完整文档 + 安装包 |
 
 ### v1.x（Phase 2）

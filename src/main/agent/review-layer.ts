@@ -26,6 +26,7 @@ import {
   emotionEnumToCn,
 } from '../../shared/types/emotion';
 import { appendReviewError } from './rand-error';
+import { detectHeartjump, HEARTJUMP_ACTION_TAG } from './heartjump';
 
 // ── 开关 & 模型配置 ────────────────────────────────────────────
 
@@ -444,6 +445,21 @@ export class ReviewLayer {
     const intent = this.mapIntent(aResult);
     const output = this.mapOutput(bResult, assistantOutput);
     const emotion = this.mapEmotion(cResult, assistantOutput);
+
+    // ── 心动检测（Heartjump）──
+    // 在 C 维后调用，检测"违背逻辑、违背习惯、但符合人格"的瞬间
+    const emotionEnum: NahidaEmotion = cResult.tag ? resolveCnEmotion(cResult.tag) : NahidaEmotion.Greeting;
+    const actionMatch = assistantOutput.match(/（([^）]+)）\s*$/);
+    const actionTag = actionMatch?.[1] ?? '';
+    const heartjump = detectHeartjump(userMessage, assistantOutput, emotionEnum, actionTag);
+
+    // 心动时：emotion.score 升级 + 触发特殊动作
+    if (heartjump.detected) {
+      console.log(`[Heartjump] detected: intensity=${heartjump.intensity.toFixed(2)}, reason=${heartjump.reason}`);
+      emotion.score = Math.min(4, emotion.score + 1);
+      emotion.actionTag = HEARTJUMP_ACTION_TAG;
+      emotion.emotionActionMatch = true;
+    }
 
     let pass = intent.score >= 3 && output.score >= 3 && emotion.score >= 3;
 

@@ -17,6 +17,10 @@ export enum IpcChannel {
   PERSONALITY_CREATE = 'personality:create',
   PERSONALITY_DELETE = 'personality:delete',
   RAND_ERROR_REPORT = 'rand-error:report',
+  CONFIG_GET = 'config:get',
+  CONFIG_SET = 'config:set',
+  FEEDBACK_SUBMIT = 'feedback:submit',
+  FEEDBACK_OPEN = 'feedback:open',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -188,6 +192,45 @@ export const randErrorReportSchema = z.object({
 });
 export type RandErrorReportPayload = z.infer<typeof randErrorReportSchema>;
 
+// ---------- config:get（获取配置） ----------
+export const configGetSchema = z.object({});
+export type ConfigGetPayload = z.infer<typeof configGetSchema>;
+
+export const configGetResultSchema = z.object({
+  ok: z.boolean(),
+  config: z.record(z.unknown()).optional(),
+});
+export type ConfigGetResultPayload = z.infer<typeof configGetResultSchema>;
+
+// ---------- config:set（保存配置） ----------
+export const configSetSchema = z.object({
+  config: z.record(z.unknown()),
+});
+export type ConfigSetPayload = z.infer<typeof configSetSchema>;
+
+export const configSetResultSchema = z.object({
+  ok: z.boolean(),
+});
+export type ConfigSetResultPayload = z.infer<typeof configSetResultSchema>;
+
+// ---------- feedback:submit（提交反馈） ----------
+export const feedbackSubmitSchema = z.object({
+  type: z.enum(['bug', 'feature', 'other']),
+  title: z.string().min(1).max(100),
+  content: z.string().min(1),
+});
+export type FeedbackSubmitPayload = z.infer<typeof feedbackSubmitSchema>;
+
+export const feedbackSubmitResultSchema = z.object({
+  ok: z.boolean(),
+  filepath: z.string().optional(),
+});
+export type FeedbackSubmitResultPayload = z.infer<typeof feedbackSubmitResultSchema>;
+
+// ---------- feedback:open（打开反馈窗口，无 payload） ----------
+export const feedbackOpenSchema = z.object({});
+export type FeedbackOpenPayload = z.infer<typeof feedbackOpenSchema>;
+
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
   [IpcChannel.AGENT_CHAT]: agentChatSchema,
@@ -205,6 +248,10 @@ export const ipcSchemas = {
   [IpcChannel.PERSONALITY_CREATE]: personalityCreateSchema,
   [IpcChannel.PERSONALITY_DELETE]: personalityDeleteSchema,
   [IpcChannel.RAND_ERROR_REPORT]: randErrorReportSchema,
+  [IpcChannel.CONFIG_GET]: configGetSchema,
+  [IpcChannel.CONFIG_SET]: configSetSchema,
+  [IpcChannel.FEEDBACK_SUBMIT]: feedbackSubmitSchema,
+  [IpcChannel.FEEDBACK_OPEN]: feedbackOpenSchema,
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

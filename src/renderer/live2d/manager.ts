@@ -97,6 +97,9 @@ export async function initLive2D(options: Live2DInitOptions): Promise<void> {
       // 禁用自动交互（避免 pixi-live2d-display 与 PixiJS 7.x 的交互兼容性问题）
       (model as any)._autoInteract = false;
 
+      // PixiJS 7.x 兼容：mock isInteractive（pixi-live2d-display 内部调用）
+      (model as any).isInteractive = () => true;
+
       // 初始位置：让模型完全适应 canvas 高度（避免显示过大只看到局部）
       // 思路：先按用户传入的 scale，再用 model.width/height 真实画布尺寸做 fit，取较小值
       const fitScale = (() => {
@@ -107,7 +110,7 @@ export async function initLive2D(options: Live2DInitOptions): Promise<void> {
           const modelH = internal?.originalPixelsHeight || (model as any).height || 0;
           if (modelW <= 0 || modelH <= 0) return scale;
 
-          console.log('[Live2D] model native size:', { modelW, modelH, canvasW: width, canvasH: height });
+          console.log('[Live2D] model native size:', `modelW=${modelW}, modelH=${modelH}, canvasW=${width}, canvasH=${height}`);
 
           // 取 width 和 height 两个方向都能塞下的最大 scale
           const fitW = (width * 0.9) / modelW;

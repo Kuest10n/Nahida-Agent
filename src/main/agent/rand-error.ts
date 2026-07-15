@@ -64,8 +64,11 @@ const MEMORY_DIR = path.resolve(process.cwd(), 'memory');
 
 // ── 模块状态 ──────────────────────────────────────────────────
 
-/** 按类型分组的错误日志 */
+/** 按类型分组的错误日志（用于报告样本） */
 const errorLog = new Map<ReviewErrorType, ErrorRecord[]>();
+
+/** 按类型累计计数（独立计数器，不受报告后清理影响） */
+const errorCounts = new Map<ReviewErrorType, number>();
 
 /** 已生成但尚未被消费的报告队列 */
 const pendingReports: RandErrorReport[] = [];
@@ -120,13 +123,18 @@ export function appendReviewError(type: ReviewErrorType, sample: string): void {
     list.splice(0, list.length - MAX_RECORDS_PER_TYPE);
   }
 
-  // 检查是否超阈值
-  if (list.length >= ERROR_THRESHOLD) {
-    const report = generateReport(type);
+  // 独立计数器：每次追加 +1，不受报告后清理影响
+  const current = errorCounts.get(type) ?? 0;
+  const next = current + 1;
+  errorCounts.set(type, next);
+
+  // 检查是否超阈值（>50 自动抛出）
+  if (next >= ERROR_THRESHOLD) {
+    const report = generateReport(type, next);
     if (report) {
       pendingReports.push(report);
-      list.splice(0, list.length - 10);
-      console.warn(`[RandError] threshold reached: ${type} ×${report.count}, report generated`);
+      // 报告生成后不清空计数，保持累计可见
+      console.warn(`[RandError] threshold reached: ${type} ×${next}, report generated`);
     }
   }
 }
@@ -153,10 +161,10 @@ export function consumePendingReports(): RandErrorReport[] {
  */
 export function getErrorCounts(): Record<ReviewErrorType, number> {
   return {
-    'A-OOC': errorLog.get('A-OOC')?.length ?? 0,
-    'B-bracket': errorLog.get('B-bracket')?.length ?? 0,
-    'C-mismatch': errorLog.get('C-mismatch')?.length ?? 0,
-    'D-tool': errorLog.get('D-tool')?.length ?? 0,
+    'A-OOC': errorCounts.get('A-OOC') ?? 0,
+    'B-bracket': errorCounts.get('B-bracket') ?? 0,
+    'C-mismatch': errorCounts.get('C-mismatch') ?? 0,
+    'D-tool': errorCounts.get('D-tool') ?? 0,
   };
 }
 
@@ -262,7 +270,7 @@ function appendToReflect(type: ReviewErrorType, sample: string, count: number): 
 /**
  * 生成单类型的 Rand_error 报告
  */
-function generateReport(type: ReviewErrorType): RandErrorReport | null {
+function generateReport(type: ReviewErrorType, totalCount: number): RandErrorReport | null {
   const list = errorLog.get(type);
   if (!list || list.length === 0) return null;
 
@@ -271,7 +279,7 @@ function generateReport(type: ReviewErrorType): RandErrorReport | null {
 
   const report: RandErrorReport = {
     type,
-    count: list.length,
+    count: totalCount,
     threshold: ERROR_THRESHOLD,
     recentSamples: recent,
     suggestion: ERROR_SUGGESTIONS[type],
@@ -282,7 +290,7 @@ function generateReport(type: ReviewErrorType): RandErrorReport | null {
   const known = isKnownIssue(type);
   if (!known) {
     // 新问题，追加到 reflect.md
-    appendToReflect(type, recent[0] ?? '', list.length);
+    appendToReflect(type, recent[0] ?? '', totalCount);
     console.log(`[RandError] new issue detected and logged: ${type}`);
   } else {
     console.log(`[RandError] known issue triggered again: ${type}`);

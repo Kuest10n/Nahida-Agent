@@ -1,6 +1,6 @@
 {
   "name": "nahida-agent",
-  "version": "0.9.5",
+  "version": "0.9.8",
   "private": true,
   "main": "dist/main/main/index.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
+    "keytar": "^7.9.0",
     "node-llama-cpp": "^3.19.0",
     "pixi-live2d-display": "^0.4.0",
     "pixi.js": "^7.4.3",

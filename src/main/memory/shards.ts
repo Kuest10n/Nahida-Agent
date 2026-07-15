@@ -20,6 +20,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { decryptString, encryptString, isEncryptionEnabled } from './crypto';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
@@ -96,11 +97,13 @@ export function loadShards(): void {
         continue;
       }
 
-      const content = fs.readFileSync(filePath, 'utf-8').trim();
+      const rawContent = fs.readFileSync(filePath, 'utf-8').trim();
+      // 如果启用了加密，尝试解密（兼容明文旧文件）
+      const content = isEncryptionEnabled() ? safeDecrypt(rawContent, `${name}.md`) : rawContent;
       loadedShards.set(name, {
         name,
-        content,
-        length: content.length,
+        content: content.trim(),
+        length: content.trim().length,
       });
     }
 
@@ -191,4 +194,81 @@ export function listLoadedShards(): LoadedShard[] {
 export function resetShards(): void {
   loadedShards.clear();
   initialized = false;
+}
+
+// ── 隐私沙箱：加密写回 ────────────────────────────────────────
+//
+// 默认不开启（兼容性优先）。调用 initEncryptionWithKeytar() 或
+// initEncryptionWithPin() 后，下次写回文件会自动加密。
+// 读取时自动识别明文/密文（前缀判断）。
+
+/**
+ * 安全解密：失败时返回原文（兼容性兜底）
+ *
+ * 旧文件是明文的，解密失败就当明文用。
+ * 新的加密文件有 enc: 前缀，能正常解密。
+ */
+function safeDecrypt(content: string, filename: string): string {
+  if (!isEncryptionEnabled()) return content;
+
+  // 是加密格式 → 解密
+  if (content.startsWith('enc:')) {
+    try {
+      return decryptString(content);
+    } catch (err) {
+      console.warn(`[Shards] decrypt ${filename} failed:`, err instanceof Error ? err.message : String(err));
+      return content; // 解密失败兜底，返回密文本身（至少不丢数据）
+    }
+  }
+
+  // 明文 → 直接返回
+  return content;
+}
+
+/**
+ * 写回分片到磁盘（支持加密）
+ *
+ * 如果启用了加密，会自动加密后写入。
+ * 原子写：先写 .tmp 再 rename。
+ */
+export function writeShard(name: ShardName, content: string): void {
+  const filePath = path.join(MEMORY_DIR, `${name}.md`);
+
+  try {
+    if (!fs.existsSync(MEMORY_DIR)) {
+      fs.mkdirSync(MEMORY_DIR, { recursive: true });
+    }
+
+    const toWrite = isEncryptionEnabled() ? encryptString(content) : content;
+    const tmpPath = `${filePath}.tmp`;
+    fs.writeFileSync(tmpPath, toWrite, 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+
+    // 更新内存缓存
+    loadedShards.set(name, {
+      name,
+      content: content.trim(),
+      length: content.trim().length,
+    });
+  } catch (err) {
+    console.error(`[Shards] write ${name}.md failed:`, err);
+  }
+}
+
+/**
+ * 把所有已加载的分片加密写回（启用加密时调用一次）
+ *
+ * 把明文的旧文件全部转成加密格式。
+ * 只处理已加载的分片（没加载的说明不常用，留给用户手动处理）。
+ */
+export function encryptAllShards(): number {
+  if (!isEncryptionEnabled()) return 0;
+
+  let count = 0;
+  for (const [name, shard] of loadedShards) {
+    writeShard(name, shard.content);
+    count++;
+  }
+  console.log(`[Shards] encrypted ${count} shards`);
+  return count;
 }
