@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { initLive2D, playAction, hitTestModel, playAudioForViseme } from './manager';
+import { initLive2D, playAction, hitTestModel, playAudioForViseme, updateMousePosition } from './manager';
 import { IpcChannel } from '../../shared/types/ipc';
 
 const Live2dApp: React.FC = () => {
@@ -19,7 +19,7 @@ const Live2dApp: React.FC = () => {
       modelUrl,
       width: window.innerWidth,
       height: window.innerHeight,
-      scale: 0.45,
+      scale: 0.25,
     })
       .then(() => {
         setStatus('ready');
@@ -61,6 +61,9 @@ const Live2dApp: React.FC = () => {
       const y = e.clientY - rect.top;
       const hit = hitTestModel(x, y);
       setIsHoveringModel(hit);
+
+      // 眼神跟随：把鼠标位置传给 manager，每帧驱动 ParamAngleX/Y
+      updateMousePosition(x, y, rect.width, rect.height);
 
       // 只有状态变化时才发 IPC，减少主进程压力
       window.nahidaAPI?.invoke(IpcChannel.LIVE2D_PENETRATE, { enable: !hit }).catch(() => {

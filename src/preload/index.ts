@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannel } from '../shared/types/ipc';
 
+console.log('[Preload] nahida-agent preload script loaded');
+
 // 通道白名单 —— 只允许列表内的 channel，防渲染层乱发
 const INVOKE_CHANNELS = new Set<string>([
   IpcChannel.AGENT_CHAT,
@@ -50,6 +52,7 @@ const nahidaAPI = {
 
 // 通过 contextBridge 暴露，保持 contextIsolation=true
 contextBridge.exposeInMainWorld('nahidaAPI', nahidaAPI);
+console.log('[Preload] nahidaAPI exposed to renderer via contextBridge');
 
 // 类型声明（渲染层用 Window['nahidaAPI']）
 export type NahidaAPI = typeof nahidaAPI;

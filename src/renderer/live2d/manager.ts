@@ -97,11 +97,38 @@ export async function initLive2D(options: Live2DInitOptions): Promise<void> {
       // 禁用自动交互（避免 pixi-live2d-display 与 PixiJS 7.x 的交互兼容性问题）
       (model as any)._autoInteract = false;
 
-      // 初始位置：居中偏上，确保全身可见（腿部向下延伸较多）
+      // 初始位置：让模型完全适应 canvas 高度（避免显示过大只看到局部）
+      // 思路：先按用户传入的 scale，再用 model.width/height 真实画布尺寸做 fit，取较小值
+      const fitScale = (() => {
+        try {
+          // cubism4 的 internalModel 有 originalPixelsWidth/Height，是模型原画布尺寸
+          const internal: any = (model as any).internalModel;
+          const modelW = internal?.originalPixelsWidth || (model as any).width || 0;
+          const modelH = internal?.originalPixelsHeight || (model as any).height || 0;
+          if (modelW <= 0 || modelH <= 0) return scale;
+
+          console.log('[Live2D] model native size:', { modelW, modelH, canvasW: width, canvasH: height });
+
+          // 取 width 和 height 两个方向都能塞下的最大 scale
+          const fitW = (width * 0.9) / modelW;
+          const fitH = (height * 0.9) / modelH;
+          const fitted = Math.min(fitW, fitH);
+
+          // 用户传入的 scale 作为上限（用户希望别太小）
+          return Math.min(scale, fitted);
+        } catch {
+          return scale;
+        }
+      })();
+
       model.anchor.set(0.5, 0.5);
-      model.scale.set(scale);
+      model.scale.set(fitScale);
+
+      // 居中（垂直方向也居中，让模型完全可见）
       model.x = app.screen.width / 2;
-      model.y = app.screen.height * 0.42;
+      model.y = app.screen.height / 2;
+
+      console.log('[Live2D] final scale:', fitScale);
 
       // 初始 Idle 动作
       playMotion('Idle', 0, 1);
@@ -121,6 +148,11 @@ export async function initLive2D(options: Live2DInitOptions): Promise<void> {
   // 3. 窗口 resize 适配
   // 注：IPC 监听由 live2d.tsx 的 useEffect 负责，避免双重监听导致动作播放两次
   window.addEventListener('resize', handleResize);
+
+  // 4. 眼神跟随：每帧把鼠标位置映射到头部参数
+  if (app) {
+    app.ticker.add(tickHeadFollow);
+  }
 }
 
 /** stub 模式：画个草元素光晕占位，不炸 */
@@ -187,23 +219,79 @@ export function playAction(options: PlayActionOptions): void {
 /**
  * 底层：调用 pixi-live2d-display 的 motion()
  * 播完后重置优先级
+ *
+ * 注意：每次只注册一次 motionFinish 监听（用 once + 闭包检查优先级）
+ * 修复 v0.9.5 bug：之前用 on() 每次都加监听器，导致同 priority 的 motion 完成时
+ *  currentPriority 被反复重置成 0，下一帧又触发同 priority 的 motion，循环播放同一组动作
  */
+let motionFinishBound = false;
 function playMotion(group: string, index: number, priority: number): void {
   if (!model) return;
 
   try {
     (model as any).motion(group, index);
 
-    // 动作结束后重置优先级（pixi-live2d-display 有 motionFinish 事件）
-    (model as any).on('motionFinish', () => {
-      if (currentPriority === priority) {
+    // 一次性绑定全局 motionFinish（每次都注册 on 会导致监听器堆积）
+    if (!motionFinishBound) {
+      motionFinishBound = true;
+      (model as any).on('motionFinish', () => {
+        // 全部动作结束后重置优先级
         currentPriority = 0;
-      }
-    });
+      });
+    }
   } catch (e) {
-    // 模型没配这个 motion 组，退回 Idle
+    // 模型没配这个 motion 组，退回 Idle（不重置优先级，避免循环）
     console.warn(`[Live2D] motion "${group}[${index}]" not found:`, e);
-    currentPriority = 0;
+  }
+}
+
+// ── 鼠标跟随（眼神） ────────────────────────────────────────────
+
+/** 鼠标 x/y 归一化值（-1..1），用于驱动 ParamAngleX/ParamAngleY */
+let mouseX = 0;
+let mouseY = 0;
+
+/** 头部角度最大幅度（弧度） */
+const HEAD_ANGLE_MAX = 0.3;
+
+/** 眼神平滑系数（0=不跟随，1=瞬移） */
+const HEAD_SMOOTH = 0.18;
+
+/** 当前头部参数（用于平滑过渡） */
+let headX = 0;
+let headY = 0;
+
+/**
+ * 更新鼠标位置（由外部 mousemove 事件调用）
+ */
+export function updateMousePosition(domX: number, domY: number, canvasW: number, canvasH: number): void {
+  // 中心为 (0, 0)，归一化到 [-1, 1]
+  mouseX = ((domX / canvasW) * 2 - 1);
+  mouseY = ((domY / canvasH) * 2 - 1);
+}
+
+/**
+ * 每帧更新头部参数（PIXI ticker 调用）
+ *
+ * 把鼠标位置映射到 Cubism 头部参数 ParamAngleX / ParamAngleY
+ * 注意：模型如果没有头部骨骼，会抛错被 try-catch 吞掉
+ */
+export function tickHeadFollow(): void {
+  if (!model) return;
+
+  // 目标值：限制幅度
+  const targetX = mouseX * HEAD_ANGLE_MAX;
+  const targetY = mouseY * HEAD_ANGLE_MAX;
+
+  // 平滑过渡（低通滤波）
+  headX += (targetX - headX) * HEAD_SMOOTH;
+  headY += (targetY - headY) * HEAD_SMOOTH;
+
+  try {
+    (model as any).parameter('ParamAngleX', headX);
+    (model as any).parameter('ParamAngleY', -headY); // Y 轴反向（屏幕坐标系向下）
+  } catch {
+    // 模型没配这些参数，静默忽略
   }
 }
 

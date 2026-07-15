@@ -9,15 +9,21 @@ import fs from 'node:fs';
  *   dist/
  *     main/main/index.js          (主进程入口)
  *     main/main/windows/manager.js (本文件)
- *     preload/preload/index.js    (预加载脚本)
+ *     preload/index.js            (预加载脚本，rootDir=src 平铺)
  *     renderer/main/index.html    (聊天窗口 HTML)
  *     renderer/live2d/index.html  (Live2D 窗口 HTML)
  *
  * __dirname = dist/main/main/windows/
- * ../../../preload/preload/index.js → dist/preload/preload/index.js ✅
+ * ../../../preload/index.js → dist/preload/index.js ✅
  */
 function getPreloadPath(): string {
-  return path.join(__dirname, '../../../preload/preload/index.js');
+  const primary = path.join(__dirname, '../../../preload/index.js');
+  // 兜底：开发期 dist 结构若被改动，回退到 dist/preload/preload/index.js
+  if (!fs.existsSync(primary)) {
+    const fallback = path.join(__dirname, '../../../preload/preload/index.js');
+    if (fs.existsSync(fallback)) return fallback;
+  }
+  return primary;
 }
 
 /**
@@ -42,6 +48,8 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 600,
     minHeight: 480,
     title: '纳西妲 Agent',
+    backgroundColor: '#f5f7fa', // 防止白屏闪烁
+    show: false, // 等 ready-to-show 再显示，避免白屏
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -52,6 +60,36 @@ export function createMainWindow(): BrowserWindow {
 
   console.log('[Main] preload path:', preloadPath);
   console.log('[Main] preload exists:', fs.existsSync(preloadPath));
+
+  // 渲染层准备完毕后显示窗口，避免白屏
+  win.once('ready-to-show', () => {
+    win.show();
+    win.focus();
+    // 移到最顶层并激活（避免被其他窗口遮盖）
+    win.moveTop();
+    console.log('[Main] window ready and focused');
+  });
+
+  // 加载失败兜底：5s 内若还看不到 ready-to-show，主动 show + 输出诊断
+  setTimeout(() => {
+    if (!win.isVisible()) {
+      console.warn('[Main] window still not visible after 5s — forcing show');
+      win.show();
+      win.focus();
+      win.moveTop();
+    }
+  }, 5000);
+
+  // 渲染层加载失败的诊断信息
+  win.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
+    console.error(`[Main] did-fail-load: code=${errorCode} desc=${errorDescription} url=${validatedURL}`);
+  });
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error(`[Main] render-process-gone: reason=${details.reason} exitCode=${details.exitCode}`);
+  });
+  win.webContents.on('preload-error', (_e, preloadPath, error) => {
+    console.error(`[Main] preload-error: path=${preloadPath} err=${error.message}`);
+  });
 
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(`${process.env.VITE_DEV_SERVER_URL}main/index.html`);
@@ -65,20 +103,27 @@ export function createMainWindow(): BrowserWindow {
     console.log(`[Renderer][L${level}] ${message} (${sourceId}:${line})`);
   });
 
+  // 主窗口重新获得焦点时移到最顶（防止被 Live2D 一直置顶遮盖）
+  win.on('focus', () => {
+    win.moveTop();
+  });
+
   return win;
 }
 
 // Live2D 透明漂浮窗
 export function createLive2dWindow(): BrowserWindow {
   const { workAreaSize } = screen.getPrimaryDisplay();
-  const winWidth = 450;
-  const winHeight = 700;
+  // 缩小 Live2D 窗口尺寸，避免太大遮挡主窗口
+  const winWidth = 320;
+  const winHeight = 480;
 
   const win = new BrowserWindow({
     width: winWidth,
     height: winHeight,
-    x: workAreaSize.width - winWidth - 40,
-    y: workAreaSize.height - winHeight - 20,
+    // 放在右下角，但不与主窗口冲突
+    x: workAreaSize.width - winWidth - 20,
+    y: workAreaSize.height - winHeight - 60,
     frame: false,
     transparent: true,
     alwaysOnTop: true,

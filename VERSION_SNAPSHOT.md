@@ -294,3 +294,70 @@
 
 ### 废弃物待清
 - [ ] `modelfiles/qwen2.5-1.5b-review-lora-v2.Modelfile` → `.deprecated` 观察期已过，待删除
+
+---
+
+# VERSION_SNAPSHOT v0.9.5
+
+> 快照时间：2026-07-15
+> 代码版本：v0.9.5（UI 4 项修复 —— Live2D 循环动作 + 眼神跟随 + 主窗口置顶 + Cherry Studio 布局）
+> 状态：当前版本
+
+---
+
+## 代码
+
+- commit: 待提交
+- package.json: `0.9.5`
+- TS 编译：3/3 零错（main / preload / renderer）
+- 本版变更（4 项 UI 修复）：
+
+### 1. Live2D 循环动作 bug
+- **症状**：模型一直循环播放同一组动作（"像在祷告"）
+- **根因**：`playMotion()` 每次都 `model.on('motionFinish', ...)` 注册监听器，多次调用导致同 priority 动作完成时 `currentPriority` 被反复重置成 0，下一帧又触发同 priority 的 motion，陷入循环
+- **修法**（[manager.ts](file:///e:/Nahida%20agent/src/renderer/live2d/manager.ts#L222-L241)）：
+  - 加 `motionFinishBound` 标志位
+  - 全局只注册一次 `motionFinish` 监听器
+  - 失败 motion 退到 Idle 时不重置优先级，避免循环
+
+### 2. 眼神跟随鼠标
+- **症状**：模型没有眼神跟随鼠标
+- **根因**：v0.9.4 没实现鼠标→头部参数映射
+- **修法**（[manager.ts](file:///e:/Nahida%20agent/src/renderer/live2d/manager.ts#L243-L291) + [live2d.tsx](file:///e:/Nahida%20agent/src/renderer/live2d/live2d.tsx#L62-L66)）：
+  - 新增 `updateMousePosition(domX, domY, w, h)`：归一化鼠标位置
+  - 新增 `tickHeadFollow()`：每帧用低通滤波把鼠标位置映射到 `ParamAngleX` / `ParamAngleY`
+  - PIXI ticker 调度：每帧调用 `tickHeadFollow`
+  - 平滑系数 0.18（柔顺不抖动）
+  - 头部最大幅度 0.3 弧度（~17°）
+
+### 3. 主窗口被遮盖
+- **症状**：主窗口难以呼出到最前台，被 Live2D 一直置顶遮盖
+- **修法**（[windows/manager.ts](file:///e:/Nahida%20agent/src/main/windows/manager.ts#L64-L109)）：
+  - `ready-to-show` 时 `win.show() + focus() + moveTop()`
+  - 5s 兜底：若还不可见，强制 `show() + focus() + moveTop()`
+  - `focus` 事件：`win.moveTop()`（主动切到主窗口时抢回最顶层）
+  - 加载失败诊断：`did-fail-load` / `render-process-gone` / `preload-error` 日志
+
+### 4. Cherry Studio 风格布局
+- **症状**：原单栏布局，按钮小，不够现代
+- **修法**（新建 [Sidebar.tsx](file:///e:/Nahida%20agent/src/renderer/main/Sidebar.tsx) + 重构 [ChatPanel.tsx](file:///e:/Nahida%20agent/src/renderer/main/ChatPanel.tsx)）：
+  - **左 60px 折叠 / 220px 展开** 侧边栏：人格切换 + 新对话 + /stats + 历史占位（v0.9.5 占位）
+  - 主区：标题栏 + 消息列表 + StatusBar + 输入栏
+  - 视觉：草绿渐变 + 圆角 + 阴影 + 玻璃拟态标题栏（backdrop-filter blur）
+  - 字体：系统字体栈 + PingFang SC
+
+### 5. 配套改动
+- [preload/index.ts](file:///e:/Nahida%20agent/src/preload/index.ts)：加 `[Preload] loaded/exposed` 启动日志
+- [main.tsx](file:///e:/Nahida%20agent/src/renderer/main/main.tsx)：加 [ErrorBoundary.tsx](file:///e:/Nahida%20agent/src/renderer/main/ErrorBoundary.tsx) 包裹 App，避免组件错误炸白屏
+
+## 训练 / 资源
+
+- 同 v0.9.4（无变更）
+
+## 已知 / 待办
+
+### 待办（v1.0.0 前）
+- [ ] Heartjump.md 心动机制（review-layer C 维后 detectHeartjump，捕捉"违背逻辑、违背习惯、但符合人格的瞬间"）
+- [ ] 六顶帽并行（白/红/黑/黄/绿/蓝 6 个并行 Lora 专家）
+- [ ] Rand_error 自主学习（>50 累计自动抛出 + 写回 SOHA）
+- [ ] v1.0.0：Phase 1 完整闭环（五合一快照 + AGPLv3 LICENSE 决策）

@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChatPanel } from './ChatPanel';
+import { ErrorBoundary } from './ErrorBoundary';
 
 /**
  * T4 完整聊天界面
@@ -11,7 +12,11 @@ import { ChatPanel } from './ChatPanel';
  *   - 输入栏（回车发送）
  */
 const App: React.FC = () => {
-  return <ChatPanel />;
+  return (
+    <ErrorBoundary>
+      <ChatPanel />
+    </ErrorBoundary>
+  );
 };
 
 const root = createRoot(document.getElementById('root')!);
