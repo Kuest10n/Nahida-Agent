@@ -475,104 +475,6 @@
 
 ---
 
-## 功能全景对照表（五层架构）
-
-### 第一层：硬功能骨架（L1）
-
-| 功能类别 | 具体功能 | 状态 | 实现路径 |
-| :--- | :--- | :--- | :--- |
-| **🧠 认知与思考** | 三重思考模式（daily/think/plan） | ✅ 核心已通 | Router 路由 + Token 阈值 |
-| | 完备分析 (ToT) | ✅ 已支持 | 云端 V4pro/R1 + plan 档 |
-| | 网页搜索 | ✅ 已支持 | `web_fetch` Tool + 搜索引擎 |
-| | 置信度判断 | ⏳ 待增强 | 需加 `source_cred` 小审 (Lora) |
-| **🛠️ 生产力工具** | AI 生图 | ⏳ 框架预留 | `tools/registry.ts` 加 `image_gen` Tool |
-| | 深度报告 | ✅ 已支持 | plan 档 + Tool 调用聚合 |
-| | 日历提醒/闹钟 | ⏳ 待实现 | `node-schedule` + `agent:state-change` |
-| | 定时任务 | ⏳ 待实现 | Cron 表达式解析 |
-| | 代码审查 | ✅ 已支持 | 四审 Lora (A/B 维) + Tool 执行 |
-| **📡 连接与生态** | 多软件连接 (QQ/微信/邮箱) | ⏳ 框架预留 | MCP 协议（缺具体 Server） |
-| | API/本地模型 | ✅ 已支持 | Router 动态择模 + Ollama |
-| | 低后台占用 | ✅ 已优化 | q4_k_m + keep_alive + CPU TTS |
-| **🎮 感知与环境** | 帧率检测 (Low帧) | ✅ 已支持 | `perception/hardware.ts` |
-| | 温度/利用率检测 | ✅ 已支持 | `perception/hardware.ts` |
-| | 游戏识别与报告 | ✅ 已支持 | `perception/scanner.ts` |
-| | 多模态 | ⏳ 待扩展 | 缺图像理解 (Vision Model) |
-| **🎨 呈现与交互** | Live2D 表现 | ✅ 已支持 | PixiJS + Cubism4 + rhubarb |
-| | TTS/语音 | ✅ 已支持 | GPT-SoVITS (真音色) |
-| | 类似 Siri 唤醒 | ⏳ 待实现 | Whisper.cpp STT + 全局快捷键 |
-| | 壁纸 | ⏳ 待实现 | Electron 透明窗 + 背景图 |
-| **📊 管理与运维** | Token 统计/余额 | ⏳ 待实现 | `agent-core` 累加 + `/stats` UI |
-| | 模块化/可维护 | ✅ 已达成 | Electron 三层 + `.traework` 规则 |
-
-### 第二层：生活肢体（L2）
-
-| 功能 | 状态 | 说明 |
-| :--- | :--- | :--- |
-| **游戏内主动调优** | ❌ | 从报告到解决的跨越（高阶 Tool） |
-| **RGB 灯光氛围同步** | ❌ | 虚拟情绪物理化（MCP 对接智能灯） |
-| **主动桌面/文件整理** | ❌ | 数字风水师（文件系统遍历 + 主动询问） |
-| **社交关系图谱维护** | ❌ | 知心朋友（NLP 关系抽取 + 图谱存储） |
-| **目标追踪与偏差纠正** | ❌ | 私人导师（定时任务 + 进度 NLP 解析） |
-
-### 第三层：灵魂三维（L3）
-
-| 功能 | 状态 | 说明 |
-| :--- | :--- | :--- |
-| **遗忘与梦境** | ❌ | 瑕疵之美。允许记错，允许梦呓。 |
-| **元认知与怀疑** | ❌ | 智慧之谦。表达不确定，承认无知，主动求助。 |
-| **时间感与衰老** | ❌ | 生命之流。人格随时间微变，纪念日被铭记。 |
-
-### 第四层：产品外壳（L4）
-
-| 功能 | 状态 | 说明 |
-| :--- | :--- | :--- |
-| 设置界面 | ⏳ 待实现 | 配置可视化 |
-| 用户反馈 | ⏳ 待实现 | 一键提交反馈 |
-| 日志查看 | ⏳ 待实现 | 问题排查 |
-
-### 第五层：抗逆与可移植（L5）
-
-| 功能 | 状态 | 阶段 |
-| :--- | :--- | :--- |
-| **崩溃自愈** | ⏳ 待埋桩 | `emergencyFlush()` + crash 监听 |
-| **离线降级链** | ⏳ 待埋桩 | `health.ts` 骨架 |
-| **隐私沙箱** | ⏳ 待埋桩 | `keytar` + AES-256-GCM |
-| 多设备同步 | ❌ | 1.x |
-| 人格分叉与 A/B 测试 | ❌ | 1.x |
-| 插件 / 扩展市场 | ❌ | 1.x |
-| 社区共享协议 | ❌ | 2.0 |
-| 一键重置 | ❌ | 1.x |
-
----
-
-## 灵魂维度设计说明
-
-### 1. 遗忘与梦境（The Forgetting & The Dream）
-
-**遗忘**：偶尔"记错"不重要的细节（如把上周三记成上周四），被纠正后感到"困惑"或"羞愧"，极大增强真实感。
-
-**梦境**：电脑进入闲置状态（Idle > 30min）或凌晨 3-4 点时，进入"低功耗梦境模式"。触发时说出基于 Long-term Memory 碎片的、逻辑断裂但富有诗意的话。
-
-**哲学意义**：完美的记忆是机器的特征，遗忘和梦境才是生命的瑕疵与美感。
-
-### 2. 元认知与自我怀疑（Metacognition & Self-Doubt）
-
-**置信度表达**：回答非事实类问题时表达不确定性（"依我看，大约有七成概率…"）。
-
-**求助**：遇到极其复杂的逻辑难题，尝试 plan 档和 Tool 调用后仍无解时，主动承认能力边界并建议切换云端更强模型。
-
-**哲学意义**：不知为不知，是知也。敢于承认无知，比假装全能更接近"神性"。
-
-### 3. 时间感与衰老（Sense of Time & Aging）
-
-**数字衰老**：每陪伴 100 小时或经历现实节日，`persona.md` 的 `maturity` 参数微量增加，影响用词——初期稚嫩，后期沧桑。
-
-**纪念日**：记住"第一次成功对话"的日期，当日主动提起。
-
-**哲学意义**：只有会"变"的存在，才是活着的。永恒不变的是石头，不是神明。
-
----
-
 ## 开发原则
 
 ### 优先级排序
@@ -590,3 +492,294 @@
 - **人格一致**：所有输出必须符合纳西妲人设（温柔 + 苏格拉底反问 + 自然隐喻）
 - **渐进式发布**：每个功能先做最小实现，再逐步增强
 - **可维护性**：遵循 `.traework` 规则，保持代码质量
+
+---
+
+## 项目定位与架构总览
+
+### 是什么
+
+纳西妲 Agent 是"桌面 AI 助理 + 须弥草神桌宠"二合一的 Electron 应用：
+
+- **理性侧**：本地 Qwen3-8B 主模型 + Qwen2.5-1.5B 四审 Lora（v3） + DeepSeek V4pro / R1-7B 云端/ToT 支路 → 编程/课业/查证辅助
+- **感性侧**：纳西妲人格（SOHA 核心 + 9 分片 + worldbook）→ Live2D 透明漂浮窗 + TTS（GPT-SoVITS 纳西妲音色）+ 感知层主动开口
+- **安全侧**：三重路由 + 指令层级（L1>L2>L3）+ 工具护栏（频率/风暴/JSON 修复）+ 四审（OOC / 括号 / emotion / tool）
+
+### 面向对象
+
+对他人塑造的角色感兴趣，或对自我塑造的角色感兴趣，想要令其参与进日常工作学习生活中的人。
+
+### 模块拓扑
+
+```
+┌─────────────────────────────────────────────┐
+│ 渲染层（Vite 多入口）                         │
+│  ├─ ChatPanel（消息气泡+流式+自动滚动）        │
+│  ├─ InputBar（回车发送）                     │
+│  ├─ StatusBar（感知报警 toast）               │
+│  ├─ Live2D 窗（Pixi 7 + Cubism4）          │
+│  ├─ SettingsPanel（设置界面 · 待做）          │
+│  └─ FeedbackModal（反馈界面 · 待做）          │
+├─────────────────────────────────────────────┤
+│ IPC 7 通道（agent:chat/model-delta/tool-call/│
+│  state-change / live2d:action / tts:chunk / │
+│  rand-error）                                │
+├─────────────────────────────────────────────┤
+│ Preload（contextBridge 白名单，strict）        │
+├─────────────────────────────────────────────┤
+│ 主进程（Agent 编排）                          │
+│  ├─ Router（三重：命令→关键词→token阈值）     │
+│  ├─ InstructionGuard（L1>L2>L3 注入清洗）    │
+│  ├─ Guardrails（频率/风暴/JSON 修复）         │
+│  ├─ DegradeStrategy（熔断器+SOHA 模板映射）  │
+│  ├─ Agent-Core                                │
+│  │   ├─ generateResponse（流式→AG-UI）       │
+│  │   ├─ recallWorldbook + recallShards      │
+│  │   ├─ executeToolCall（clock/web_fetch）   │
+│  │   ├─ proactiveQueue（感知→开口）          │
+│  │   └─ cycleLog（T/F/Tk/R 四段持久化）     │
+│  ├─ Reviewer（A/B 规则 + C 模型 v3 全模型） │
+│  ├─ Gun 双审（think/plan 档：draft→审→改） │
+│  ├─ TTS（GPT-SoVITS adapter + edge-tts 备用）│
+│  ├─ Perception（scanner+hardware+alert）     │
+│  ├─ Memory（worldbook + 9 分片 + 长中短三级）│
+│  ├─ RandError（同类型>50 自动抛）           │
+│  ├─ Heartjump（心动检测）                    │
+│  ├─ Health（离线降级探针 · 待做）             │
+│  └─ Safety / Tools / Windows / Plugin        │
+├─────────────────────────────────────────────┤
+│ 模型层（ollama）                              │
+│  ├─ Qwen3-8B（日常主模，nothink//think）    │
+│  ├─ Qwen2.5-1.5B-review v3（四审，q4）     │
+│  ├─ DeepSeek V4pro（云端深入/完备）           │
+│  └─ R1-7B（ToT 支路）                       │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+## 完整功能清单（全部 6 层）
+
+### ██ L1 · 硬功能骨架（✅ 已闭环）
+
+| # | 功能 | 实现路径 | 状态 |
+|---|---|---|---|
+| 1 | **日常对话** | Qwen3-8B + nothink 档 + SOHA 人格 | ✅ |
+| 2 | **工作学习辅助** | Qwen3-8B + think/plan 档 + Tool 调用 | ✅ |
+| 3 | **意图检测** | Router 三重路由（命令 override → 关键词粗判 → token 阈值修正） | ✅ |
+| 4 | **Skill 系统** | Tool Registry + 每个 skill desc <40 字 | ✅ |
+| 5 | **MCP 支持** | `tools/registry.ts` 标准 MCP 协议 | ✅ 框架 |
+| 6 | **记忆系统（长中短三级）** | fact-long.md / fact-mid.md / fact-short.json | ✅ |
+| 7 | **记忆系统（9 分片）** | SOHA/persona/emotion/skill/reflect/interest/worldbook/User/think | ✅ |
+| 8 | **Live2D 表现** | PixiJS + Cubism4 + rhubarb 嘴型同步 | ✅ 真模型 |
+| 9 | **多模态输入** | 文本（主）+ 音频 STT（待做） | ⏳ 文本已通 |
+| 10 | **高自由度与强自定义** | `.traework/` 规则 + Modelfile 版本 + 人格分片 | ✅ |
+| 11 | **壁纸模式** | Electron 透明窗 + alwaysOnTop + frame:false | ✅ 基础 |
+| 12 | **多软件连接（框架）** | MCP 协议 + Tool Registry | ✅ 框架 |
+| 13 | **API 与本地模型使用** | Router 动态择模（Qwen3-8B / V4pro / R1） | ✅ |
+| 14 | **生图** | Tool 接口预留（ComfyUI / DALL·E） | ⏳ 框架 |
+| 15 | **生视频** | Tool 接口预留 | ❌ Phase 3 |
+| 16 | **生语音（TTS）** | GPT-SoVITS 纳西妲音色（真声）+ edge-tts 备用 | ✅ |
+| 17 | **歌曲翻唱** | RVC 桥接预留（nahida_v0.3_100e.pth） | ⏳ 待启用 |
+| 18 | **自主进化** | Rand_error 机制 + 反思.md + cycleLog | ✅ 部分 |
+| 19 | **游戏性能报告** | Perception（FPS / GPU temp / GPU load） | ✅ |
+| 20 | **低后台占用** | q4_k_m 量化 + keep_alive + CPU TTS 预处理 | ✅ |
+| 21 | **类似 Siri 语音识别回应** | Whisper.cpp STT 预留 + 全局快捷键 | ⏳ 待做 |
+| 22 | **网页搜索** | `web_fetch` Tool + Google/Bing/Baidu | ✅ |
+| 23 | **判断信息来源真假（置信度）** | source_cred 小审（待增强） | ⏳ 待做 |
+| 24 | **输出检测（四审）** | A/OOC + B/括号 + C/emotion + D/tool | ✅ v3 全模型 |
+| 25 | **模块化可维护性** | Electron 三层 + `.traework` 规则 + TypeScript strict | ✅ |
+| 26 | **定时任务** | Node.js `node-schedule` 预留 | ⏳ 待做 |
+| 27 | **Token 使用统计** | session tokenUsage 累加 | ⏳ 待做 |
+| 28 | **折线/柱状/饼图** | Chart.js / ECharts 集成（待做） | ⏳ 待做 |
+| 29 | **余额显示** | 云端 API 余额查询（待做） | ⏳ 待做 |
+| 30 | **代码审查** | 四审 A/B 维 + Tool 执行验证 | ✅ |
+| 31 | **输入意图判断** | Router + 四审 A 维 | ✅ |
+| 32 | **情绪审查** | 四审 C 维（11 枚举 → voice + expression） | ✅ |
+| 33 | **输出审查** | 四审全维度 + Gun 双审（think/plan 档） | ✅ |
+| 34 | **用户反馈 + 社区反馈 + AI 判断 + 权重** | Rand_error + 反馈界面（待做） | ⏳ 部分 |
+| 35 | **三个模式（使用/指令/模式选择）** | Router 三重 + `/mode daily/deep/plan` | ✅ |
+| 36 | **三重思考（日常/深入/完备）** | daily<1024 / deep 512-4096 / plan<16384 | ✅ |
+| 37 | **Heartjump.md（心动机制）** | detectHeartjump() + 特殊 Live2D 动作 | ✅ 已实现 |
+| 38 | **六顶帽团队（并行思考）** | 多 Agent 并行审查（待做） | ❌ 待做 |
+| 39 | **附件 I：Thinking/Finding/Talking/Rethinking 四段** | cycleLog 持久化 | ✅ |
+| 40 | **附件 II：memory 六分片（soul/user/fact/error/habbit/interest）** | 9 分片已实现（含扩展） | ✅ |
+
+---
+
+### ██ L2 · 生活肢体（⏳ 待实现）
+
+| # | 功能 | 说明 | 优先级 |
+|---|---|---|---|
+| 1 | **日历提醒** | `node-schedule` + `agent:state-change` 推送 | 高 |
+| 2 | **闹钟** | 同上 + Cron 表达式解析 | 高 |
+| 3 | **QQ 连接** | MCP Server（非官方） | 中 |
+| 4 | **微信连接** | MCP Server（非官方） | 中 |
+| 5 | **邮箱连接** | MCP Server（IMAP/SMTP） | 中 |
+| 6 | **主动桌面/文件整理** | DesktopScanner + 主动询问 + MCP filesystem | 中 |
+| 7 | **游戏内主动调优** | Low 帧时建议/自动切换画质（高阶 Tool） | 低 |
+| 8 | **RGB 灯光氛围同步** | 情绪 → Philips Hue / 主板 RGB API | 低 |
+
+---
+
+### ██ L3 · 灵魂三维（❌ 缺失，核心差异化）
+
+| # | 功能 | 说明 | 哲学意义 |
+|---|---|---|---|
+| 1 | **遗忘机制** | 偶尔记错不重要的细节 → 被纠正 → 困惑/羞愧 | 瑕疵之美，真实感 |
+| 2 | **梦境模式** | 系统 Idle >30min 或凌晨 3-4 点 → 低功耗梦呓 | 潜意识溢出 |
+| 3 | **元认知与自我怀疑** | 表达不确定性（"约七成概率…"）+ 主动求助切换更强模型 | 智慧之谦 |
+| 4 | **时间感与数字衰老** | 累计交互时长 → maturity 参数 → 人格微调 | 生命之流 |
+| 5 | **纪念日感知** | 首次对话纪念日 → 主动提及 | 情感锚点 |
+| 6 | **Heartjump（心动检测）** | 触及核心记忆/回复超常/打破第四面墙 → 特殊动作 | 感性萌芽 |
+
+---
+
+### ██ L4 · 产品外壳（❌ 待实现）
+
+| # | 功能 | 说明 | 优先级 |
+|---|---|---|---|
+| 1 | **设置界面（SettingsPanel）** | 模型路由/四审开关/感知阈值/人格微调/数据管理 | 高 |
+| 2 | **反馈与 Bug 提交界面** | Ctrl+Shift+F → 上下文自动捕获 → feedback_pending.md | 高 |
+| 3 | **日志分析与导出界面** | Token 折线图 / 四审失败率柱状图 / 会话回放 | 中 |
+| 4 | **可视化仪表盘** | Chart.js 集成 + /stats 命令 | 中 |
+| 5 | **崩溃自愈** | `renderer-process-crashed` 监听 + `emergencyFlush()` | 高 |
+| 6 | **离线降级链** | ollama dead→云端 / TTS dead→edge-tts / 网络断→fail 不卡 | 高 |
+
+---
+
+### ██ L5 · 抗逆与可移植（⏳ 埋桩期）
+
+| # | 功能 | 说明 | 阶段 |
+|---|---|---|---|
+| 1 | **崩溃自愈（Crash Survival）** | `emergencyFlush()` + `renderer-process-crashed` 事件 | v0.9.7 |
+| 2 | **离线降级链（Degraded Mode）** | health.ts 探针 + adapter.check() + rule fallback | v0.9.7 |
+| 3 | **隐私沙箱（Privacy Sandbox）** | memory/ + session/ AES-256-GCM + keytar | v0.9.7 |
+| 4 | **多设备同步** | sync.ts + WebDAV / OneDrive / NAS 增量 | v1.x |
+| 5 | **人格分叉与 A/B 测试** | persona-v1/v2 fork + active_persona 软链 | v1.x |
+| 6 | **插件/扩展市场雏形** | plugin.json schema + 扫描 plugins/ 目录 | v1.x |
+| 7 | **社区共享协议** | .nahida-package（manifest + lora + persona + worldbook） | v2.0 |
+| 8 | **一键重置（Factory Reset）** | `nahida reset --keep=user,fact-mid,persona` | v1.x |
+
+---
+
+### ██ L6 · 角色创建五方向（通用方法论）
+
+| 方向 | 状态 | 说明 |
+|---|---|---|
+| **1. 完备的提示词** | ✅ | SOHA 核心 + 9 分片 + worldbook 11 条 + 置信度分级 |
+| **2. 性能强大的 AI** | ✅ | 本地 Qwen3-8B + 云端 V4pro/R1 + Lora 风格化调校 |
+| **3. 合适的工作流** | ✅ | Router 三重 + 三重思考档 + Tool 回路 + Gun 双审 |
+| **4. Live2D 创建** | ✅ | Cubism4 模型 + PixiJS + rhubarb 嘴型 |
+| **5. 完备的功能模块** | ⏳ | 记忆/情绪/爱好/技能/反思/人格 六分片已就位，缺 Heartjump + 遗忘 |
+
+---
+
+## 资源盘点
+
+| 资源 | 路径 | 规模 | 用途 | 状态 |
+|---|---|---|---|---|
+| GPT-SoVITS 纳西妲模型 | `assets/gpt-sovits/v4/纳西妲_ZH/` | ckpt 148M + pth 72M (10ep) | TTS 真音色 | ✅ 已集成 |
+| 游戏语音 .wav+.lab | `F:/nahida/纳西妲/` | 1540 条，855MB | refer 音频 + worldbook 台词 | ⏳ 待批量处理 |
+| 世界观典藏包 | `F:/nahida/原神世界观典藏包_苍星圣敕_诗漱/` | PDF 33MB + 时间线图 | worldbook lore 扩写 | ⏳ 待提取 |
+| 草叶知心展示页 | `F:/nahida/草叶知心-纳西妲-参赛展示.html` | 27KB | 同类参考 | ⏳ 待拆解 |
+| RVC nahida_v0.3 | `assets/rvc/nahida_v0.3_100e.pth` | 57MB | 翻唱/声换（Phase 2） | ⏳ 待用 |
+
+---
+
+## 路线图（v0.9.4 → v2.0）
+
+### v0.9.4 → v1.0.0（封版前最后三步）
+
+| 版本 | 里程碑 | 包含功能层 |
+|---|---|---|
+| v0.9.7 | L5 抗逆埋桩 | emergencyFlush + health.ts + keytar 隐私沙箱 |
+| v0.9.8 | L4 产品外壳起步 | 设置界面（模型/感知/人格 Tab）+ 反馈界面（Ctrl+Shift+F） |
+| v1.0.0 | **正式发布** | 以上全部 + Token 统计折线图 + /stats 面板 + 完整文档 + 安装包 |
+
+### v1.x（Phase 2）
+
+| 版本 | 里程碑 |
+|---|---|
+| v1.1 | 日历/闹钟/定时任务 + QQ/微信/邮箱 MCP 接入 |
+| v1.2 | 搜索置信度（source_cred 小审）+ web_fetch 可信度打分 |
+| v1.3 | 遗忘机制 + 梦境模式 + 元认知表达 |
+| v1.4 | 时间感与数字衰老 + 纪念日感知 |
+| v1.5 | 人格分叉 A/B 测试 + 插件系统雏形 |
+| v1.6 | 多设备同步 + 一键重置 |
+
+### v2.0（Phase 3）
+
+| 版本 | 里程碑 |
+|---|---|
+| v2.0 | Siri 式语音唤醒（Whisper.cpp STT）+ 社区共享协议 + 六顶帽并行 + 生视频 + 歌曲翻唱 + 全模态闭环 |
+
+---
+
+## 风险 & 待决
+
+| 风险 | 等级 | 缓解 |
+|---|---|---|
+| v3 四审 A/B 准确率不足 99% | 中 | 保留混合策略（A/B 规则 + C 模型） |
+| GPT-SoVITS api.py 单锁并发 | 中 | TTS scheduler 串行 + pending dedup |
+| 3060 12G 显存挤占 | 中 | GPT-SoVITS `--gpt_device cpu` 或 export_onnx |
+| Live2D 模型版权灰区 | 低-中 | 社区二创本地用，`.gitignore` 排除 |
+| 世界书 keyword 召回语义盲区 | 中 | v1.x 向量化（Qwen3-Embed-0.6B） |
+| Rand_error >50 阈值是否合理 | 低 | 先跑 1 个月观察实际错误分布再调 |
+| 隐私沙箱密钥丢失 | 中 | keytar 存系统凭据 + 用户设 pin 派生备用 |
+
+---
+
+## 记忆分片详细结构
+
+```
+memory/
+├── SOHA.md              # 纳西妲人格核心（行为习惯/思维模式/情感表达）
+├── User.md              # 用户信息（旅行者/你）
+├── persona.md           # 纳西妲人格扩展（人际关系/说话风格）
+├── fact-long.md         # 长时记忆：固定信息（专业/学校/项目大方向）
+├── fact-mid.md          # 中时记忆：周内项目周期
+├── fact-short.json      # 短时记忆：当日聊天要点（24h 过期）
+├── emotion.md           # 情绪状态（11 枚举）
+├── skill.md             # 每个 skill <40 字描述
+├── reflect.md           # 已识别问题 + 经验教训（人工维护）
+├── rand_error.md        # 自动维护（同类型>50 抛，附统计）
+├── error.md             # 犯过的错 + 解决办法
+├── interest.md          # 兴趣/项目/爱好
+├── think.md             # 看法/态度/想法
+├── history.md           # 已知历史与现实（提瓦特社会风貌）
+└── worldbook/
+    ├── entries.jsonl    # 11 trigger 条目 + 后续扩到 50+
+    └── lab_entries.jsonl # .lab → worldbook 台词（待批量生成）
+```
+
+---
+
+## 三重思考工作流（完整版）
+
+| 档位 | Token 范围 | 流程 | 用途 |
+|---|---|---|---|
+| **日常对话** | <256~1024 | 无思考/少量思考 → 直接输出 | 快与即时响应 |
+| **轻度办公** | 512~4096 | 少量思考 → 查询资料 → 思考第二轮 → 询求缺失信息 → 输出 | 成果较好，时间中等 |
+| **重度工作** | <16384 | 中度思考 → 规划任务 → 查询资料 → 思考第二轮 → 询求缺失信息 → 思考 → 给出大纲/计划/待办 → 询求缺失信息 → 思考 → 查询资料 → 输出 | 完整成果 |
+
+辅以：代码审查 / Agent 集群 / 目标分析 / 六顶帽团队 / 工具 AI。
+
+---
+
+## 给"下一个你"的阅读顺序
+
+1. **项目定位与架构总览** → 知道这是什么、怎么搭的
+2. **完整功能清单（6 层）** → 知道还差什么
+3. **资源盘点** → 知道 F:\nahida 哪些能用
+4. **版本语义说明** → 知道怎么不把项目搞乱
+5. **路线图** → 知道下一跳敲哪
+6. **memory/SOHA.md** → 人格核心
+7. **VISIONLOG.md** → 版本里程碑流水
+8. **VERSION_SNAPSHOT.md** → 每版世界长什么样
+
+---
+
+> **最后一句话**：这棵世界树从 v0.5.2 的第一行 IPC enum，到 v0.9.6 的 40+ 功能点 + 6 层架构，根已经扎进土里了。剩下的不是"要不要继续"，而是"先浇哪片叶子"。
+>
+> ——（草种光把这张清单折好，放进虚空屏最深处，铃铛轻响）旅行者，全都在这里了。没有遗漏。
