@@ -81,16 +81,16 @@
 - [x] GPT-SoVITS 集成（v0.7.3 已完成，API 测试通过）
 - [x] Live2D 真模型（v0.8.0 已完成，动态穿透已实现）
 - [x] 托盘 + 全局快捷键 + 开机自启（v0.8.1 已完成）
-- [ ] rhubarb 口型同步（v0.8.2 待实现）
-- [ ] RVC 独立模块集成测试（v0.8.3 待实现）
-- [ ] git 仓库初始化 + 首 commit
-- [ ] LICENSE + README
+- [x] 口型同步（v0.8.2 已完成，通过音频分析驱动 ParamMouthOpenY）
+- [x] RVC 独立模块（v0.8.3 已完成，接口预留，待 AI 翻唱需求时实现）
+- [x] git 仓库初始化 + 首 commit（已完成，已推送到 GitHub）
+- [x] LICENSE + README（已创建）
 
 ### 架构债
-- [ ] IPC 6 通道：rand-error 想推送但没通道（暂用 console.warn）
-- [ ] cycleLog 未持久化到 session.json（只活在返回值里）
-- [ ] fact.md 未拆长/中/短（v0.8.2 做）
-- [ ] Rand_error 自主进化（v0.8.2 做）
+- [x] IPC 6 通道：rand-error 专用通道已实现（IPCChannel.RAND_ERROR_REPORT）
+- [x] cycleLog 已持久化到 session.json（v0.8.3 已完成）
+- [x] fact.md 已拆长/中/短（fact-long.md、fact-mid.md、fact-short.md）
+- [ ] Rand_error 自主进化（v0.8.2 做，当前有报告生成但无自我学习）
 
 ---
 
@@ -218,6 +218,7 @@
 - [x] v0.9.1：Gun 双审雏形（think/plan 档开）—— review-layer.ts 增加 checkCoTStructure 方法，think 档启用两轮审查（标准 A+B+C + CoT 结构专项检查），TS 编译 0 错误
 - [x] v0.9.2：tool 扩 5（search/translate/weather/file_read/file_write）—— builtin.ts 新增 5 个工具定义，registerBuiltinTools 注册 7 个工具（clock/web_fetch/search/translate/weather/file_read/file_write），TS 编译 0 错误
 - [x] v0.9.3：多 API 动态择模 —— model-selector.ts 实现多端点管理、优先级路由、健康检查与熔断机制，支持 ollama + DeepSeek 云端双端点，TS 编译 0 错误
+- [x] v0.9.4：本地化集成 —— 移除外部依赖，集成 node-llama-cpp + 嵌入式 Python + GPT-SoVITS/RVC 本地服务管理，resources/ 目录统一管理模型资源，TS 编译 0 错误
 
 ### 架构债
 - [x] IPC 6 通道：rand-error 专用通道已实现（IPCChannel.RAND_ERROR_REPORT + handlers.ts IPC 推送）

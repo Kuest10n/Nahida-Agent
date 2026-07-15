@@ -1,9 +1,15 @@
 /**
- * Rand_error —— 自主进化最小实现
+ * Rand_error —— 自主进化实现
  *
  * 职责：
  *   追踪四审 fail 事件，同类型错误累计超过阈值时自动抛出 Rand_error 报告，
  *   写入 memory/rand_error.md，并返回报告内容供 IPC 推送。
+ *
+ * 自主进化机制（v0.8.2）：
+ *   - 启动时从 reflect.md 加载已识别问题
+ *   - 生成报告时检查是否与已知问题重复
+ *   - 如果是新问题，自动追加到 reflect.md
+ *   - 如果已知问题再次触发，更新其计数/最近样本
  *
  * 设计理念（来自用户草稿）：
  *   - reflect.md：人工维护"我知道我错了"（已识别+经验教训）
@@ -63,6 +69,21 @@ const errorLog = new Map<ReviewErrorType, ErrorRecord[]>();
 
 /** 已生成但尚未被消费的报告队列 */
 const pendingReports: RandErrorReport[] = [];
+
+/** reflect.md 文件路径 */
+const REFLECT_FILE = path.join(MEMORY_DIR, 'reflect.md');
+
+/** 已识别问题缓存（从 reflect.md 加载） */
+let knownIssuesCache: Map<ReviewErrorType, KnownIssue> | null = null;
+
+/** 已知问题结构 */
+interface KnownIssue {
+  type: ReviewErrorType;
+  description: string;
+  lastCount: number;
+  lastSample: string;
+  lastSeen: number;
+}
 
 // ── 错误类型 → 建议修改方向 ───────────────────────────────────
 
@@ -142,6 +163,103 @@ export function getErrorCounts(): Record<ReviewErrorType, number> {
 // ── 内部逻辑 ──────────────────────────────────────────────────
 
 /**
+ * 从 reflect.md 加载已识别问题
+ *
+ * 解析 reflect.md 中的"已识别问题"章节，提取问题类型和描述
+ */
+function loadKnownIssues(): Map<ReviewErrorType, KnownIssue> {
+  if (knownIssuesCache) return knownIssuesCache;
+
+  const cache = new Map<ReviewErrorType, KnownIssue>();
+
+  try {
+    if (!fs.existsSync(REFLECT_FILE)) {
+      knownIssuesCache = cache;
+      return cache;
+    }
+
+    const content = fs.readFileSync(REFLECT_FILE, 'utf-8');
+
+    // 解析"已识别问题"章节
+    const issuePattern = /### (\d+)\. (.+?)\n- \*\*问题\*\*：(.+?)\n/g;
+    let match;
+
+    while ((match = issuePattern.exec(content)) !== null) {
+      const description = match[2] ?? '';
+      const problem = match[3] ?? '';
+
+      // 根据描述推断错误类型
+      let type: ReviewErrorType | null = null;
+      if (/OOC|助手腔|全知/.test(description)) {
+        type = 'A-OOC';
+      } else if (/动作括号|末句/.test(description)) {
+        type = 'B-bracket';
+      } else if (/情绪|动作.*不匹配/.test(description)) {
+        type = 'C-mismatch';
+      } else if (/工具调用|tool_call/.test(description)) {
+        type = 'D-tool';
+      }
+
+      if (type) {
+        cache.set(type, {
+          type,
+          description,
+          lastCount: 0,
+          lastSample: problem,
+          lastSeen: Date.now(),
+        });
+      }
+    }
+
+    console.log(`[RandError] loaded ${cache.size} known issues from reflect.md`);
+  } catch (err) {
+    console.error('[RandError] failed to load known issues:', err);
+  }
+
+  knownIssuesCache = cache;
+  return cache;
+}
+
+/**
+ * 检查问题是否已知
+ */
+function isKnownIssue(type: ReviewErrorType): boolean {
+  const known = loadKnownIssues();
+  return known.has(type);
+}
+
+/**
+ * 将新问题追加到 reflect.md
+ */
+function appendToReflect(type: ReviewErrorType, sample: string, count: number): void {
+  try {
+    if (!fs.existsSync(REFLECT_FILE)) {
+      fs.writeFileSync(REFLECT_FILE, '# reflect.md — 反思与改进\n\n', 'utf-8');
+    }
+
+    const timestamp = new Date().toLocaleString('zh-CN');
+    const suggestion = ERROR_SUGGESTIONS[type];
+
+    const lines = [
+      '',
+      `### 自动识别问题：${type}（累计 ${count} 次）`,
+      `- **问题**：${sample}`,
+      `- **触发时间**：${timestamp}`,
+      `- **累计次数**：${count}`,
+      `- **建议修改方向**：${suggestion}`,
+      '',
+      '---',
+      '',
+    ];
+
+    fs.appendFileSync(REFLECT_FILE, lines.join('\n'), 'utf-8');
+    console.log(`[RandError] new issue appended to reflect.md: ${type}`);
+  } catch (err) {
+    console.error('[RandError] failed to append to reflect.md:', err);
+  }
+}
+
+/**
  * 生成单类型的 Rand_error 报告
  */
 function generateReport(type: ReviewErrorType): RandErrorReport | null {
@@ -151,7 +269,7 @@ function generateReport(type: ReviewErrorType): RandErrorReport | null {
   // 取最近 MAX_SAMPLES_IN_REPORT 条样本
   const recent = list.slice(-MAX_SAMPLES_IN_REPORT).map(r => r.sample);
 
-  return {
+  const report: RandErrorReport = {
     type,
     count: list.length,
     threshold: ERROR_THRESHOLD,
@@ -159,6 +277,18 @@ function generateReport(type: ReviewErrorType): RandErrorReport | null {
     suggestion: ERROR_SUGGESTIONS[type],
     generatedAt: Date.now(),
   };
+
+  // 自主进化：检查是否已知问题
+  const known = isKnownIssue(type);
+  if (!known) {
+    // 新问题，追加到 reflect.md
+    appendToReflect(type, recent[0] ?? '', list.length);
+    console.log(`[RandError] new issue detected and logged: ${type}`);
+  } else {
+    console.log(`[RandError] known issue triggered again: ${type}`);
+  }
+
+  return report;
 }
 
 /**

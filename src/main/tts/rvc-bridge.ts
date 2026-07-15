@@ -4,7 +4,7 @@
  * 职责：把输入音频（歌曲/基础语音）转换为纳西妲音色
  *   - 输入：任意音频文件路径 或 edge-tts 生成的音频
  *   - 输出：RVC 转换后的 wav
- *   - 调用方式：spawn <rvcRoot>/tools/infer_cli.py
+ *   - 调用方式：通过 python-manager 启动 infer_cli.py
  *
  * 与 GPT-SoVITS 的区别：
  *   - GPT-SoVITS：TTS 专用，文本→语音，日常对话主力
@@ -15,15 +15,20 @@
  *   - V0.3: nahida_v0.3_100e.pth（100 轮，1200 条数据，当前主力）
  *   - 模型存放在 assets/rvc/ 目录（随项目发布）
  *
+ * 本地化集成：
+ *   - RVC 模型：assets/rvc/
+ *   - Python 服务：通过 python-manager.ts 启动，无需外部依赖
+ *
  * 当前状态：接口预留，enabled = false
- * 启用步骤（v3 训练完成后）：
+ * 启用步骤：
  *   1. 把 enabled 改为 true
- *   2. 配置 NAHIDA_VOICE_RVC_ROOT 环境变量指向 RVC WebUI 目录
- *   3. 实现 synthesize()：写输入文件 → spawn infer_cli.py → 读输出 wav
+ *   2. 配置 NAHIDA_VOICE_RVC_ROOT 环境变量（可选，默认使用 resources/rvc/）
+ *   3. 实现 synthesize()：写输入文件 → python-manager 启动 infer_cli.py → 读输出 wav
  */
 
 import { resolve } from 'node:path';
 import { NahidaEmotion } from '../../shared/types/emotion';
+import { startPythonService } from '../python/python-manager';
 import type { TtsAdapter, TtsResult } from './index';
 
 /** RVC 桥接配置 */

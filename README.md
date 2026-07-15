@@ -156,16 +156,13 @@ npm run dev
 
 ## 已知问题
 
-- IPC 6 通道限制：rand-error 无专用通道，暂用 console.warn
-- Live2D 口型同步：通过实时音频分析驱动 ParamMouthOpenY，精度有限
-- 向量召回：Qwen3-Embed-0.6B 模型需手动下载
+- Live2D 口型同步：通过实时音频分析驱动 ParamMouthOpenY，精度有限（后续可集成 rhubarb 优化）
 
 ## 待办事项
 
-- [ ] IPC 通道扩展（rand-error 专用通道）
 - [ ] Live2D 口型同步优化（rhubarb 集成）
-- [ ] RVC 独立模块集成测试
-- [ ] 记忆向量化模型自动下载
+- [ ] RVC 独立模块集成测试（AI 翻唱场景）
+- [ ] 记忆向量化模型自动下载（Qwen3-Embed-0.6B）
 
 ## 许可证
 

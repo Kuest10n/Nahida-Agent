@@ -4,6 +4,7 @@ import { registerValidatedHandler } from './validate';
 import { Router, type CommandType } from '../router/router';
 import { ReviewLayer } from '../agent/review-layer';
 import { generateResponse, clearSessionHistory, type CycleLogEntry } from '../agent/agent-core';
+import { sanitizeOutput } from '../agent/stream-sanitizer';
 import { resolveActionEmotion, resolveExpression, NahidaEmotion } from '../../shared/types/emotion';
 import { TtsScheduler, GptSoVitsAdapter } from '../tts';
 import { consumePendingReports } from '../agent/rand-error';
@@ -92,9 +93,10 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         routeResult.intent,
         routeResult.degradeDecision,
         (delta, done) => {
-          // onDelta 回调：每收到一段 delta 就推给渲染层
+          // 流式输出清洗：实时剥离 <think> / [emotion:xxx] / 
+          const cleanedDelta = sanitizeOutput(delta);
           mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
-            delta,
+            delta: cleanedDelta,
             finishReason: done ? 'stop' : undefined,
             sessionId,
             timestamp: Date.now(),

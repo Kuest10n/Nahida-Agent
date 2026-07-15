@@ -15,6 +15,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ollamaChatStream, checkOllamaAvailable, type StreamCallback } from './ollama-client';
+import { sanitizeOutput } from './stream-sanitizer';
 import { recallWorldbook, loadWorldbook } from '../memory/worldbook';
 import { loadShards, getResidentShards, recallShards, type LoadedShard } from '../memory/shards';
 import { loadSessions, getSessionMessages, appendMessage as persistMessage, clearSession as persistClear } from '../memory/session-store';
@@ -342,6 +343,9 @@ export async function generateResponse(
     // 第一次调用 LLM
     let fullText = await callOllama(degradeDecision, messages, onDelta, isThinkMode);
 
+    // ── 输出清洗：剥离内部标签，避免泄漏到 UI ──
+    fullText = sanitizeOutput(fullText);
+
     // ── T9: 工具调用回路 ──
     // 检测 <tool_call> 标签 → 执行工具 → 结果回灌 → 再调用 LLM
     if (intent === 'tool' && router) {
@@ -373,6 +377,9 @@ export async function generateResponse(
 
         // 第二次调用 LLM（流式输出最终回复）
         fullText = await callOllama(degradeDecision, messages, onDelta, false);
+
+        // 工具回路后也要清洗
+        fullText = sanitizeOutput(fullText);
       }
     }
 

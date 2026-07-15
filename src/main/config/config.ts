@@ -49,6 +49,10 @@ export interface ModelConfig {
   flash: string;
   /** 审查模型名 */
   review: string;
+  /** 本地 GGUF 模型路径（支持相对路径，如 ./resources/ollama/models/qwen3-8b-nahida.gguf） */
+  localModelPath?: string;
+  /** 是否使用本地 LLM（node-llama-cpp）而非 Ollama HTTP API */
+  useLocalLLM?: boolean;
 }
 
 /** API key 配置 */
@@ -97,6 +101,7 @@ const DEFAULT_MODEL_LOCAL = 'qwen3-8b-nahida';
 const DEFAULT_MODEL_STANDARD = 'deepseek-v4pro';
 const DEFAULT_MODEL_FLASH = 'deepseek-v4pro-flash';
 const DEFAULT_MODEL_REVIEW = 'qwen2.5-1.5b-review-lora-v3';
+const DEFAULT_LOCAL_MODEL_PATH = './resources/ollama/models/qwen3-8b-nahida.gguf';
 
 const DEFAULT_SESSION_MAX_HISTORY = 10;
 const DEFAULT_SESSION_TTL = 30;
@@ -108,8 +113,9 @@ const DEFAULT_RVC_MODEL_VERSION = 'V0.3';
 const DEFAULT_RVC_ROOT = '';
 const DEFAULT_EDGE_VOICE = 'zh-CN-XiaoyiNeural';
 const DEFAULT_GPTSOVITS_API_URL = 'http://localhost:9880';
-const DEFAULT_GPTSOVITS_REF_DIR = 'F:/nahida/v4/纳西妲_ZH/reference_audios/中文/emotions';
-const DEFAULT_GPTSOVITS_MODEL_DIR = '';
+// 本地化路径：使用相对路径指向 resources 目录下的集成资源
+const DEFAULT_GPTSOVITS_REF_DIR = './resources/gpt-sovits/reference_audios';
+const DEFAULT_GPTSOVITS_MODEL_DIR = './resources/gpt-sovits/models';
 
 // ── 模块状态 ──────────────────────────────────────────────────
 
@@ -137,6 +143,7 @@ export function initConfig(): Config {
       standard: envRequired('NAHIDA_MODEL_STANDARD', DEFAULT_MODEL_STANDARD),
       flash: envRequired('NAHIDA_MODEL_FLASH', DEFAULT_MODEL_FLASH),
       review: envRequired('NAHIDA_MODEL_REVIEW', DEFAULT_MODEL_REVIEW),
+      localModelPath: envOptional('NAHIDA_LOCAL_MODEL_PATH') ?? DEFAULT_LOCAL_MODEL_PATH,
     },
     api: {
       deepseekKey: envOptional('NAHIDA_API_DEEPSEEK_KEY'),
