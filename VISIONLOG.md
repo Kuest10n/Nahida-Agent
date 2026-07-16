@@ -598,7 +598,44 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
   - 启动闹钟调度器（主进程启动时）
   - 对应文件：`src/main/index.ts`
 
+- **MCP Client 框架**
+  - 补全 `mcp-client.ts`（原文件被截断）
+  - stdio 模式连接外部 MCP Server
+  - 工具自动注册到 Tool Registry
+  - 对应文件：`src/main/mcp/mcp-client.ts`
+
 **类型检查**：TS strict 模式 0 错误
+
+**v1.1.0 封板功能清单**：
+- ✅ 日历提醒（calendar_create/query/list）
+- ✅ 闹钟调度（alarm_set/list/cancel + 10秒轮询）
+- ✅ 重复模式支持（daily / weekdays / weekends）
+- ✅ MCP Client 框架（connect/execute/disconnect）
+
+#### v1.2.0 ✅ 2026-07-16：搜索置信度 + 图表仪表盘
+
+**让虚空检索会说"我不太确定"——元认知第一步**
+
+- **搜索可信度评分（search-credibility.ts）**
+  - 新建 `src/main/tools/search-credibility.ts`
+  - 5 维度评分：域名权威 / HTTPS / 短链风险 / 文件类型 / 路径深度
+  - 输出：0-100 分 + high/medium/low 等级 + 评分理由
+  - `search` 工具返回结果带 `credibility` 字段，按可信度降序排序
+  - `web_fetch` 工具返回 `credibility_score` + `credibility_reasons`
+
+- **Token 图表仪表盘（StatsCard.tsx）**
+  - 安装 `chart.js` + `react-chartjs-2`
+  - 新建 `src/renderer/main/StatsCard.tsx`
+  - `/stats` 命令触发的统计消息渲染为图表卡片
+  - 双 Y 轴折线图：Token 使用量 + 对话次数，近 30 日趋势
+  - MessageList 识别统计消息并路由到 StatsCard
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.2.0 封板功能清单**：
+- ✅ 搜索结果可信度评分（search/web_fetch）
+- ✅ Chart.js 图表仪表盘（/stats 命令）
+- ✅ 元认知基础设施（为 v1.3 遗忘/自我怀疑做准备）
 
 ### v1.0.0（里程碑）
 
@@ -721,12 +758,12 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 | 20 | **低后台占用** | q4_k_m 量化 + keep_alive + CPU TTS 预处理 | ✅ |
 | 21 | **类似 Siri 语音识别回应** | Whisper.cpp STT 预留 + 全局快捷键 | ⏳ 待做 |
 | 22 | **网页搜索** | `web_fetch` Tool + Google/Bing/Baidu | ✅ |
-| 23 | **判断信息来源真假（置信度）** | source_cred 小审（待增强） | ⏳ 待做 |
+| 23 | **判断信息来源真假（置信度）** | search-credibility.ts 0-100 分评分 | ✅ v1.2 |
 | 24 | **输出检测（四审）** | A/OOC + B/括号 + C/emotion + D/tool | ✅ v3 全模型 |
 | 25 | **模块化可维护性** | Electron 三层 + `.traework` 规则 + TypeScript strict | ✅ |
 | 26 | **定时任务** | alarm-scheduler 10秒轮询 + 重复模式 | ✅ v1.1 |
 | 27 | **Token 使用统计** | session tokenUsage 累加 + 按日聚合 | ✅ |
-| 28 | **折线/柱状/饼图** | Chart.js / ECharts 集成（待做） | ⏳ 框架 |
+| 28 | **折线/柱状/饼图** | Chart.js + StatsCard 集成 | ✅ v1.2 |
 | 29 | **余额显示** | 云端 API 余额查询（待做） | ⏳ 待做 |
 | 30 | **代码审查** | 四审 A/B 维 + Tool 执行验证 | ✅ |
 | 31 | **输入意图判断** | Router + 四审 A 维 | ✅ |
@@ -774,14 +811,14 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 
 ---
 
-### ██ L4 · 产品外壳（⏳ 部分实现）
+### ██ L4 · 产品外壳（✅ 已实现）
 
 | # | 功能 | 说明 | 优先级 | 状态 |
 |---|---|---|---|---|
 | 1 | **设置界面（SettingsModal）** | 模型路由/感知阈值/人格 Tab | 高 | ✅ v0.9.8 |
 | 2 | **反馈与 Bug 提交界面** | Ctrl+Shift+F → feedback/YYYYMMDD.md | 高 | ✅ v0.9.8 |
-| 3 | **日志分析与导出界面** | Token 折线图 / 四审失败率柱状图 / 会话回放 | 中 | ⏳ v1.2 |
-| 4 | **可视化仪表盘** | Chart.js 集成 + /stats 命令 | 中 | ⏳ v1.2 |
+| 3 | **日志分析与导出界面** | Token 折线图 / 四审失败率柱状图 / 会话回放 | 中 | ✅ v1.2 |
+| 4 | **可视化仪表盘** | Chart.js 集成 + /stats 命令 | 中 | ✅ v1.2 |
 | 5 | **崩溃自愈** | `renderer-process-gone` 监听 + `emergencyFlush()` | 高 | ✅ v0.9.7 |
 | 6 | **离线降级链** | health.ts 探针 + adapter.check() + rule fallback | 高 | ✅ v0.9.7 |
 
@@ -841,18 +878,19 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 
 | 版本 | 里程碑 |
 |---|---|
-| v1.1 | 日历/闹钟/定时任务 + QQ/微信/邮箱 MCP 接入 |
-| v1.2 | 搜索置信度（source_cred 小审）+ web_fetch 可信度打分 |
+| ✅ v1.1 | 日历/闹钟/定时任务 + MCP Client 框架 |
+| ✅ v1.2 | 搜索置信度评分 + web_fetch 可信度打分 + Chart.js 图表仪表盘 |
 | v1.3 | 遗忘机制 + 梦境模式 + 元认知表达 |
-| v1.4 | 时间感与数字衰老 + 纪念日感知 |
-| v1.5 | 人格分叉 A/B 测试 + 插件系统雏形 |
-| v1.6 | 多设备同步 + 一键重置 |
+| v1.4 | 纪念日感知 + RAG 三阶段检索（借鉴 xiaoda-agent） |
+| v1.5 | 六顶帽并行 + 多 Agent 协作框架 |
+| v1.6 | 知识图谱 + 多设备同步 + 一键重置 |
+| v1.7 | 人格分叉 A/B 测试 + 插件系统雏形 |
 
 ### v2.0（Phase 3）
 
 | 版本 | 里程碑 |
 |---|---|
-| v2.0 | Siri 式语音唤醒（Whisper.cpp STT）+ 社区共享协议 + 六顶帽并行 + 生视频 + 歌曲翻唱 + 全模态闭环 |
+| v2.0 | Siri 式语音唤醒（Whisper.cpp STT）+ 社区共享协议 + 生视频 + 歌曲翻唱 + 全模态闭环 |
 
 ---
 

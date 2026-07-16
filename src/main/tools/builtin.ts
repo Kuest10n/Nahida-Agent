@@ -19,6 +19,7 @@
 
 import { z } from 'zod';
 import { registerTools, type ToolDefinition, type ToolResult } from './registry';
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -249,6 +250,9 @@ const webFetchTool: ToolDefinition = {
         ? `${text.slice(0, maxLen)}...[truncated]`
         : text;
 
+      const { evaluateUrlCredibility } = await import('./search-credibility.js');
+      const cred = evaluateUrlCredibility(url);
+
       return {
         ok: true,
         data: {
@@ -256,7 +260,9 @@ const webFetchTool: ToolDefinition = {
           content: truncated,
           length: text.length,
           truncated: text.length > maxLen,
-          source_cred: evaluateSourceCred(url),
+          source_cred: cred.level,
+          credibility_score: cred.score,
+          credibility_reasons: cred.reasons,
         },
         latencyMs: Date.now() - startTime,
       };
@@ -304,7 +310,7 @@ function htmlToText(html: string): string {
 
 const searchTool: ToolDefinition = {
   name: 'search',
-  description: '网络搜索。当用户要求"搜索""查一下""找一下"某个主题时调用。返回相关网页摘要。',
+  description: '网络搜索。当用户要求"搜索""查一下""找一下"某个主题时调用。返回带可信度评分的网页摘要。',
   parameters: z.object({
     query: z.string().min(1).max(200).describe('搜索关键词'),
     max_results: z.number().int().positive().max(10).optional()
@@ -315,27 +321,41 @@ const searchTool: ToolDefinition = {
     const query = params.query as string;
     const maxResults = (params.max_results as number) ?? 5;
 
-    // TODO: 接入真实搜索引擎 API（如 Bing Search API、Google Custom Search）
-    // 当前返回模拟数据，待后续集成
+    // TODO: 接入真实搜索引擎 API（如 Bing Search API、Google Custom Search、SearXNG）
+    // v1.2 先提供带可信度评分的框架数据，真实 API 在后续版本替换
     const mockResults = [
       {
         title: `${query} - 搜索结果 1`,
-        url: 'https://example.com/1',
-        snippet: `这是关于"${query}"的第一个搜索结果摘要...`,
+        url: 'https://github.com/example/repo',
+        snippet: `这是关于"${query}"的 GitHub 技术仓库摘要。`,
       },
       {
         title: `${query} - 搜索结果 2`,
-        url: 'https://example.com/2',
-        snippet: `这是关于"${query}"的第二个搜索结果摘要...`,
+        url: 'https://zh.wikipedia.org/wiki/Example',
+        snippet: `这是关于"${query}"的维基百科条目摘要。`,
+      },
+      {
+        title: `${query} - 搜索结果 3`,
+        url: 'https://bit.ly/xyz123',
+        snippet: `这是关于"${query}"的短链分享。`,
       },
     ];
+
+    const { scoreSearchResults, credibilitySummary } = await import('./search-credibility.js');
+    const scored = scoreSearchResults(mockResults).slice(0, maxResults);
 
     return {
       ok: true,
       data: {
         query,
-        results: mockResults.slice(0, maxResults),
-        total: mockResults.length,
+        results: scored.map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.snippet,
+          credibility: r.credibility,
+          summary: credibilitySummary(r as import('./search-credibility.js').ScoredSearchResult),
+        })),
+        total: scored.length,
       },
       latencyMs: Date.now() - startTime,
     };

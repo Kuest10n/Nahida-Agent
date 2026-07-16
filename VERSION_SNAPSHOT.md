@@ -459,3 +459,110 @@
 ---
 
 > **v1.0.0 封板说明**：Phase 1 已完成全部核心功能，代码 + 训练 + 资源三合一，可交付用户使用。后续 v1.x 系列进入生活肢体与灵魂三维深化阶段。
+
+---
+
+# VERSION_SNAPSHOT v1.1.0
+
+> 快照时间：2026-07-16
+> 代码版本：v1.1.0（L2 生活肢体起步）
+> 状态：当前版本
+
+---
+
+## 代码
+
+- commit: `ab123a4`（本地 main）
+- package.json: `1.1.0`
+- TS 编译：3/3 零错（main / preload / renderer）
+- 本版里程碑：日历/闹钟调度 + MCP Client 框架 + 项目代码检查修复
+
+### 核心变更
+
+#### 1. 日历工具（calendar.ts）
+- 3 个工具：`calendar_create` / `calendar_query` / `calendar_list`
+- 存储：`data/calendar/events.json`
+- 对应文件：`src/main/tools/calendar.ts`
+
+#### 2. 闹钟工具（alarm.ts）
+- 3 个工具：`alarm_set` / `alarm_list` / `alarm_cancel`
+- 存储：`data/alarm/alarms.json`
+- 对应文件：`src/main/tools/alarm.ts`
+
+#### 3. 闹钟调度器（alarm-scheduler.ts）
+- 新建文件：`src/main/tools/alarm-scheduler.ts`
+- 10 秒轮询检查闹钟列表
+- 到时触发 → IPC 推送到渲染层（`agent:state-change`）
+- 支持重复模式：`daily` / `weekdays` / `weekends`
+- 自动计算下次触发时间（重复闹钟）
+
+#### 4. MCP Client 框架（mcp-client.ts）
+- 新建完整实现：`src/main/mcp/mcp-client.ts`（原文件被截断，已补全）
+- 支持 stdio 模式连接外部 MCP Server
+- 工具自动注册到 Tool Registry
+- 核心函数：`connectMcpServer()` / `executeMcpTool()` / `disconnectMcpServer()`
+
+#### 5. 主进程集成
+- 注册 calendar/alarm 工具到 Tool Registry
+- 启动闹钟调度器（主进程启动时）
+- 对应文件：`src/main/index.ts`
+
+### 修复项
+- **mcp-client.ts 文件截断**：补全被截断的 MCP Client 实现（19行→209行）
+- **ToolResult 类型不匹配**：修复返回类型，符合 registry.ts 的 `{ ok, data, latencyMs }` 结构
+- **child.stdout/child.stdin null 检查**：添加可选链保护
+
+### 已完成功能清单（v1.0.0 + v1.1.0）
+- ✅ 日常对话 + 意图检测 + 三重路由
+- ✅ 四审机制（A-OOC / B-括号 / C-emotion / D-tool）
+- ✅ 记忆系统（9 分片 + worldbook）
+- ✅ Live2D 表现 + TTS（GPT-SoVITS）
+- ✅ 崩溃自愈 + 离线降级链 + 隐私沙箱
+- ✅ 设置界面 + 反馈界面
+- ✅ 时间感与数字衰老（maturity 参数）
+- ✅ Token 统计 + /stats 面板
+- ✅ Heartjump 心动机制 + Rand_error 自动抛出
+- ✅ 日历提醒（v1.1）
+- ✅ 闹钟调度（v1.1）
+- ✅ MCP Client 框架（v1.1）
+
+## 训练（同 v1.0.0）
+
+### 主模
+- 模型：`qwen3-8b-nahida`（ollama 本地）
+- 基模：Qwen/Qwen3-8B-Instruct
+- 模式：`/no_think`（日常）+ `/think`（深入）
+- num_ctx：4096
+- Modelfile：`modelfiles/qwen3-8b-nahida-v2.Modelfile`
+
+### 四审层
+- 审查模型：T-v3-1677-r32（1677 条，rank32）
+- 基模：Qwen/Qwen2.5-1.5B-Instruct
+- ollama 名：`qwen2.5-1.5b-review-lora-v3`
+
+## 资源（同 v1.0.0）
+
+| 资源 | 路径 | 绑代码版本 | 状态 |
+|---|---|---|---|
+| RVC v0.3 | `assets/rvc/nahida_v0.3_100e.pth` | v0.5.2 | 主力 |
+| GPT-SoVITS | `F:/nahida/v4/纳西妲_ZH/` | v0.7.1 | 已闭环 |
+| Live2D | `assets/models/nahida/Nahida.model3.json` | v0.8.0 | 真模型 |
+
+## 已知 / 待办
+
+### v1.x 规划（更新）
+- [x] v1.1：日历/闹钟/定时任务（已完成）
+- [ ] v1.2：搜索置信度（source_cred 小审）+ web_fetch 可信度打分 + 图表仪表盘
+- [ ] v1.3：遗忘机制 + 梦境模式 + 元认知表达（灵魂三维落地）
+- [ ] v1.4：RAG 三阶段检索（借鉴 xiaoda-agent）+ 纪念日感知
+- [ ] v1.5：六顶帽并行 + 多 Agent 协作框架
+- [ ] v1.6：知识图谱 + 多设备同步 + 一键重置
+
+### v2.0 远期
+- [ ] Siri 式语音唤醒（Whisper.cpp STT）
+- [ ] 社区共享协议
+- [ ] 生视频 + 歌曲翻唱 + 全模态闭环
+
+---
+
+> **v1.1.0 封板说明**：L2 生活肢体起步完成，日历/闹钟调度上线。MCP Client 框架就绪，后续可接入 QQ/微信/邮箱等外部服务。下一步进入 v1.2 搜索置信度与图表仪表盘阶段。

@@ -1,12 +1,14 @@
 import React, { useRef, useEffect } from 'react';
 import type { Message } from './types';
 import { MessageBubble } from './MessageBubble';
+import { StatsCard } from './StatsCard';
 
 /**
  * 消息列表组件
  *
  * - 自动滚动到底部（新消息 / 流式输出）
  * - 空状态显示占位提示
+ * - 识别统计类消息并渲染 StatsCard 图表
  */
 export const MessageList: React.FC<{ messages: Message[] }> = ({ messages }) => {
   const listRef = useRef<HTMLDivElement>(null);
@@ -47,9 +49,13 @@ export const MessageList: React.FC<{ messages: Message[] }> = ({ messages }) => 
         padding: '12px 16px',
       }}
     >
-      {messages.map(msg => (
-        <MessageBubble key={msg.id} message={msg} />
-      ))}
+      {messages.map(msg => {
+        // 识别统计类消息，渲染图表卡片
+        if (msg.role === 'assistant' && msg.content.startsWith('📊 Token 使用统计')) {
+          return <StatsCard key={msg.id} summary={msg.content} />;
+        }
+        return <MessageBubble key={msg.id} message={msg} />;
+      })}
     </div>
   );
 };
