@@ -5,6 +5,7 @@ import { warmupModel } from './agent/agent-core';
 import { registerBuiltinTools } from './tools/builtin';
 import { registerCalendarTools } from './tools/calendar';
 import { registerAlarmTools } from './tools/alarm';
+import { startAlarmScheduler } from './tools/alarm-scheduler';
 import { PerceptionModule } from './perception';
 import { ReviewLayer } from './agent/review-layer';
 import { proactiveQueue } from './agent/proactive-queue';
@@ -161,6 +162,9 @@ app.whenReady().then(() => {
   perception.start();
 
   registerBuiltinTools();
+  registerCalendarTools();
+  registerAlarmTools();
+  startAlarmScheduler(windowMgr.mainWindow);
 
   initPersonalityManager();
 

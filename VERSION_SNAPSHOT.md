@@ -356,8 +356,106 @@
 
 ## 已知 / 待办
 
-### 待办（v1.0.0 前）
-- [ ] Heartjump.md 心动机制（review-layer C 维后 detectHeartjump，捕捉"违背逻辑、违背习惯、但符合人格的瞬间"）
-- [ ] 六顶帽并行（白/红/黑/黄/绿/蓝 6 个并行 Lora 专家）
-- [ ] Rand_error 自主学习（>50 累计自动抛出 + 写回 SOHA）
-- [ ] v1.0.0：Phase 1 完整闭环（五合一快照 + AGPLv3 LICENSE 决策）
+### 已完成（v1.0.0）
+- [x] Heartjump.md 心动机制（detectHeartjump + 特殊 Live2D 动作"藤蔓绕腕"）
+- [x] Rand_error >50 自动抛出（rand-error.ts 独立计数器 + memory/rand_error.md 自动生成报告）
+- [x] Live2D isInteractive 兼容（mock 修复 PixiJS 7.x 报错）
+
+---
+
+# VERSION_SNAPSHOT v1.0.0
+
+> 快照时间：2026-07-15
+> 代码版本：v1.0.0（正式发布里程碑）
+> 状态：当前版本
+
+---
+
+## 代码
+
+- commit: `e3a3c25`（GitHub main）
+- package.json: `1.0.0`
+- TS 编译：3/3 零错（main / preload / renderer）
+- 本版里程碑：Token 统计 + /stats 面板 + 缺陷修复 + 测试覆盖
+
+### 核心变更
+
+#### 1. Token 统计模块（token-usage.ts）
+- 近似估算：`promptTokens ≈ 输入字符/4`，`completionTokens ≈ 输出字符/4`
+- 按日聚合：每天一个统计单元，保留最近 30 天
+- 持久化：`memory/token-usage.json`
+- 模型区分：统计每个模型的调用量和占比
+- IPC 通道：`stats:get` / `stats:get-chart`
+- 对应文件：`src/main/agent/token-usage.ts`
+
+#### 2. /stats 面板集成
+- 渲染层调用真实统计数据
+- 显示：累计 token / 总对话 / 7天趋势 / 模型分布
+- 对应文件：`src/renderer/main/ChatPanel.tsx`
+
+#### 3. 缺陷修复（1 P0 + 4 P1）
+- **P0 熔断机制失效**：review-layer.ts 原每次触发都重置计数器，改为 30s 冷却期后自动恢复
+- **P1 并发写入数据丢失**：session-store.ts debounce 和 mutex 解耦，`storeMutex` 串行化写入
+- **P1 模型重复加载**：local-llm.ts 加 `loadingPromise` 锁，防止并发请求同时通过检查
+- **P1 僵尸进程泄漏**：python-manager.ts 用 `runningServices` 进程表管理，退出时清理
+- **P1 路径遍历攻击**：builtin.ts 白名单校验，只允许项目目录内访问
+
+#### 4. 测试覆盖（38 个测试用例）
+- `model-selector.test.ts`：熔断器 + 路由策略测试
+- `personality-manager.test.ts`：人格分片加载测试
+- `vector-store.test.ts`：向量召回 + 混合召回测试
+- `embedding.test.ts`：嵌入向量生成测试
+
+### 已完成功能清单
+- ✅ 日常对话 + 意图检测 + 三重路由
+- ✅ 四审机制（A-OOC / B-括号 / C-emotion / D-tool）
+- ✅ 记忆系统（9 分片 + worldbook + 长中短三级）
+- ✅ Live2D 表现 + TTS（GPT-SoVITS）
+- ✅ 崩溃自愈 + 离线降级链 + 隐私沙箱
+- ✅ 设置界面 + 反馈界面
+- ✅ 时间感与数字衰老（maturity 参数）
+- ✅ Token 统计 + /stats 面板
+- ✅ Heartjump 心动机制 + Rand_error 自动抛出
+
+## 训练
+
+### 主模
+- 模型：`qwen3-8b-nahida`（ollama 本地）
+- 基模：Qwen/Qwen3-8B-Instruct
+- 模式：`/no_think`（日常）+ `/think`（深入）
+- num_ctx：4096
+- Modelfile：`modelfiles/qwen3-8b-nahida-v2.Modelfile`
+
+### 四审层
+- 审查模型：T-v3-1677-r32（1677 条，rank32）
+- 基模：Qwen/Qwen2.5-1.5B-Instruct
+- ollama 名：`qwen2.5-1.5b-review-lora-v3`
+- T-v2 归档：`docs/train-logs/T-v2-1602-r32/TRAIN_LOG.md`
+
+## 资源
+
+| 资源 | 路径 | 绑代码版本 | 状态 |
+|---|---|---|---|
+| RVC v0.3 | `assets/rvc/nahida_v0.3_100e.pth` | v0.5.2 | 主力 |
+| GPT-SoVITS | `F:/nahida/v4/纳西妲_ZH/` | v0.7.1 | 已闭环 |
+| Live2D | `assets/models/nahida/Nahida.model3.json` | v0.8.0 | 真模型 |
+
+## 已知 / 待办
+
+### v1.x 规划
+- [ ] v1.1：日历/闹钟/定时任务 + QQ/微信/邮箱 MCP 接入
+- [ ] v1.2：搜索置信度（source_cred 小审）+ web_fetch 可信度打分
+- [ ] v1.3：遗忘机制 + 梦境模式 + 元认知表达
+- [ ] v1.4：时间感与数字衰老增强 + 纪念日感知
+- [ ] v1.5：人格分叉 A/B 测试 + 插件系统雏形
+- [ ] v1.6：多设备同步 + 一键重置
+
+### v2.0 远期
+- [ ] Siri 式语音唤醒（Whisper.cpp STT）
+- [ ] 社区共享协议
+- [ ] 六顶帽并行思考
+- [ ] 生视频 + 歌曲翻唱 + 全模态闭环
+
+---
+
+> **v1.0.0 封板说明**：Phase 1 已完成全部核心功能，代码 + 训练 + 资源三合一，可交付用户使用。后续 v1.x 系列进入生活肢体与灵魂三维深化阶段。

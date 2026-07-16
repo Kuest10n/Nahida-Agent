@@ -400,11 +400,11 @@
 - **修订号（第三位）**：bug 修复、优化、重构
   - 示例：`0.1.1` IPC 校验优化 / `0.5.3` 模型集成
 
-### 当前版本：`0.9.6`
+### 当前版本：`1.1.0`
 
-- 已完成：T4-T11 + Perception + Proactive + Budget + GPT-SoVITS + StatusBar + rhubarb stub + v3 e2e 预写 + 记忆三分 + Rand_error + cycleLog 四段 + Heartjump 心动机制 + Cherry Studio 风格布局
-- 进行中：L5 基础设施埋桩（崩溃自愈 / 离线降级 / 隐私沙箱）
-- 待办：v1.0.0 正式发布（完整文档 + 用户安装包）
+- 已完成：Phase 1 全部核心功能 + 日历/闹钟调度
+- 状态：v1.1.0 开发中
+- 下一步：MCP Client 接入框架
 
 ---
 
@@ -570,6 +570,33 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 - ✅ 设置界面 + 反馈界面
 - ✅ 时间感与数字衰老（maturity 参数）
 - ✅ Token 统计 + /stats 面板
+
+**类型检查**：TS strict 模式 0 错误
+
+#### v1.1.0 ✅ 2026-07-16：L2 生活肢体起步
+
+**日历 + 闹钟调度上线——生活助理的第一步**
+
+- **日历工具（calendar.ts）**
+  - 3 个工具：calendar_create / calendar_query / calendar_list
+  - 存储：`data/calendar/events.json`
+  - 对应文件：`src/main/tools/calendar.ts`
+
+- **闹钟工具（alarm.ts）**
+  - 3 个工具：alarm_set / alarm_list / alarm_cancel
+  - 存储：`data/alarm/alarms.json`
+  - 对应文件：`src/main/tools/alarm.ts`
+
+- **闹钟调度器（alarm-scheduler.ts）**
+  - 10 秒轮询检查闹钟列表
+  - 到时触发 → IPC 推送到渲染层（agent:state-change）
+  - 支持重复模式：daily / weekdays / weekends
+  - 对应文件：`src/main/tools/alarm-scheduler.ts`
+
+- **主进程集成**
+  - 注册 calendar/alarm 工具到 Tool Registry
+  - 启动闹钟调度器（主进程启动时）
+  - 对应文件：`src/main/index.ts`
 
 **类型检查**：TS strict 模式 0 错误
 
