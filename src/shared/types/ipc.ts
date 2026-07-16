@@ -21,6 +21,8 @@ export enum IpcChannel {
   CONFIG_SET = 'config:set',
   FEEDBACK_SUBMIT = 'feedback:submit',
   FEEDBACK_OPEN = 'feedback:open',
+  STATS_GET = 'stats:get',
+  STATS_GET_CHART = 'stats:get-chart',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -231,6 +233,31 @@ export type FeedbackSubmitResultPayload = z.infer<typeof feedbackSubmitResultSch
 export const feedbackOpenSchema = z.object({});
 export type FeedbackOpenPayload = z.infer<typeof feedbackOpenSchema>;
 
+// ---------- stats:get（获取统计摘要） ----------
+export const statsGetSchema = z.object({});
+export type StatsGetPayload = z.infer<typeof statsGetSchema>;
+
+export const statsGetResultSchema = z.object({
+  ok: z.boolean(),
+  summary: z.string().optional(),
+  data: z.record(z.unknown()).optional(),
+});
+export type StatsGetResultPayload = z.infer<typeof statsGetResultSchema>;
+
+// ---------- stats:get-chart（获取折线图数据） ----------
+export const statsGetChartSchema = z.object({});
+export type StatsGetChartPayload = z.infer<typeof statsGetChartSchema>;
+
+export const statsGetChartResultSchema = z.object({
+  ok: z.boolean(),
+  chartData: z.object({
+    dates: z.array(z.string()),
+    tokens: z.array(z.number()),
+    conversations: z.array(z.number()),
+  }).optional(),
+});
+export type StatsGetChartResultPayload = z.infer<typeof statsGetChartResultSchema>;
+
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
   [IpcChannel.AGENT_CHAT]: agentChatSchema,
@@ -252,6 +279,8 @@ export const ipcSchemas = {
   [IpcChannel.CONFIG_SET]: configSetSchema,
   [IpcChannel.FEEDBACK_SUBMIT]: feedbackSubmitSchema,
   [IpcChannel.FEEDBACK_OPEN]: feedbackOpenSchema,
+  [IpcChannel.STATS_GET]: statsGetSchema,
+  [IpcChannel.STATS_GET_CHART]: statsGetChartSchema,
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

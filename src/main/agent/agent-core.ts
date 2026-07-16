@@ -28,6 +28,7 @@ import type { Router } from '../router/router';
 import type { ModelTier, DegradeDecision } from '../router/degrade-strategy';
 import type { RouteIntent } from '../router/router';
 import { getMaturityPrompt, recordConversation, initMaturity } from './maturity';
+import { recordTokenUsageWithLatency, initTokenUsage } from './token-usage';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
@@ -407,6 +408,18 @@ export async function generateResponse(
 
     // L3: 记录对话时长，更新成熟度（时间感与数字衰老）
     recordConversation(latencyMs);
+
+    // Token 统计（近似估算：字符数/4）
+    const promptTokens = Math.ceil(userMessage.length / 4);
+    const completionTokens = Math.ceil(fullText.length / 4);
+    recordTokenUsageWithLatency(
+      sessionId,
+      degradeDecision.modelId || getLocalModel(),
+      promptTokens,
+      completionTokens,
+      latencyMs,
+      tier,
+    );
 
     return {
       content: fullText,

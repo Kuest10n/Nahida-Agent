@@ -12,6 +12,7 @@ import { setAutoStart, isAutoStartEnabled } from '../tray/autostart';
 import { updateTrayStatus } from '../tray/tray-manager';
 import { getCurrentPersonality, listPersonalities, setCurrentPersonality, createPersonality, deletePersonality, initPersonalityManager } from '../memory/personality-manager';
 import { getConfig, saveConfigToDisk } from '../config/config';
+import { getTokenStatsSummary, getChartData } from '../agent/token-usage';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -314,6 +315,18 @@ ${payload.content}
       console.error('[IPC] feedback:submit failed:', err);
       return { ok: false };
     }
+  });
+
+  // stats:get —— 获取统计摘要（/stats 命令用）
+  registerValidatedHandler(IpcChannel.STATS_GET, () => {
+    const summary = getTokenStatsSummary();
+    return { ok: true, summary };
+  });
+
+  // stats:get-chart —— 获取折线图数据
+  registerValidatedHandler(IpcChannel.STATS_GET_CHART, () => {
+    const chartData = getChartData();
+    return { ok: true, chartData };
   });
 }
 

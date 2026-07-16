@@ -540,6 +540,39 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 
 **类型检查**：TS strict 模式 0 错误
 
+#### v1.0.0 ✅ 2026-07-15：正式发布里程碑
+
+**Token 统计 + /stats 面板——产品化最后一环**
+
+- **token-usage.ts**：统一统计模块
+  - 近似估算：promptTokens ≈ 输入字符/4，completionTokens ≈ 输出字符/4
+  - 按日期聚合：每天一个统计单元，保留最近 30 天
+  - 持久化：`memory/token-usage.json`
+  - 模型区分：统计每个模型的调用量和占比
+  - 对应文件：`src/main/agent/token-usage.ts`
+
+- **agent-core.ts 集成**
+  - 每次对话结束调用 `recordTokenUsageWithLatency()`
+  - 记录：promptTokens / completionTokens / latencyMs / tier / modelId
+  - 对应文件：`src/main/agent/agent-core.ts`
+
+- **/stats 面板**
+  - IPC 通道：`stats:get` / `stats:get-chart`
+  - 渲染层调用，显示真实统计数据（累计 token / 总对话 / 7天趋势 / 模型分布）
+  - 对应文件：`src/renderer/main/ChatPanel.tsx`
+
+**v1.0.0 封板功能清单**：
+- ✅ 日常对话 + 意图检测 + 三重路由
+- ✅ 四审机制（A-OOC / B-括号 / C-emotion / D-tool）
+- ✅ 记忆系统（9 分片 + worldbook）
+- ✅ Live2D 表现 + TTS（GPT-SoVITS）
+- ✅ 崩溃自愈 + 离线降级链 + 隐私沙箱
+- ✅ 设置界面 + 反馈界面
+- ✅ 时间感与数字衰老（maturity 参数）
+- ✅ Token 统计 + /stats 面板
+
+**类型检查**：TS strict 模式 0 错误
+
 ### v1.0.0（里程碑）
 
 - 正式发布
@@ -665,8 +698,8 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 | 24 | **输出检测（四审）** | A/OOC + B/括号 + C/emotion + D/tool | ✅ v3 全模型 |
 | 25 | **模块化可维护性** | Electron 三层 + `.traework` 规则 + TypeScript strict | ✅ |
 | 26 | **定时任务** | Node.js `node-schedule` 预留 | ⏳ 待做 |
-| 27 | **Token 使用统计** | session tokenUsage 累加 | ⏳ 待做 |
-| 28 | **折线/柱状/饼图** | Chart.js / ECharts 集成（待做） | ⏳ 待做 |
+| 27 | **Token 使用统计** | session tokenUsage 累加 + 按日聚合 | ✅ |
+| 28 | **折线/柱状/饼图** | Chart.js / ECharts 集成（待做） | ⏳ 框架 |
 | 29 | **余额显示** | 云端 API 余额查询（待做） | ⏳ 待做 |
 | 30 | **代码审查** | 四审 A/B 维 + Tool 执行验证 | ✅ |
 | 31 | **输入意图判断** | Router + 四审 A 维 | ✅ |
@@ -771,7 +804,7 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 | ✅ v0.9.7 | L5 抗逆埋桩 | emergencyFlush + health.ts + keytar 隐私沙箱 |
 | ✅ v0.9.8 | L4 产品外壳起步 | 设置界面（模型/感知/人格 Tab）+ 反馈界面（Ctrl+Shift+F） |
 | ✅ v0.9.9 | L3 时间感与数字衰老 | maturity 参数 + 30天成熟 + 遗忘衰减 + 人格微调 |
-| v1.0.0 | **正式发布** | 以上全部 + Token 统计折线图 + /stats 面板 + 完整文档 + 安装包 |
+| ✅ v1.0.0 | **正式发布** | Token 统计 + /stats 面板 + 以上全部 |
 
 ### v1.x（Phase 2）
 

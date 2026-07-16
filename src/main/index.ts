@@ -15,6 +15,7 @@ import { emergencyFlush, loadSessions } from './memory/session-store';
 import { healthMonitor, createHttpProbe, createNetworkProbe } from './health/health';
 import { getConfig, getOllamaBaseUrl, loadUserConfigFromDisk } from './config/config';
 import { initMaturity } from './agent/maturity';
+import { initTokenUsage } from './agent/token-usage';
 import { cleanupAllServices } from './python/python-manager';
 
 // 单例窗口管理器 + Perception 模块 + 主动开口 reviewer
@@ -164,6 +165,8 @@ app.whenReady().then(() => {
   initPersonalityManager();
 
   initMaturity();
+
+  initTokenUsage();
 
   void warmupModel();
 

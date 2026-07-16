@@ -173,14 +173,27 @@ export const ChatPanel: React.FC = () => {
     }
   }, [personalities]);
 
-  // /stats 触发（v0.9.5 占位）
-  const handleShowStats = useCallback(() => {
-    setMessages(prev => [...prev, {
-      id: generateMessageId(),
-      role: 'assistant',
-      content: '（轻托腮）……统计功能还在生长中，再等等吧。',
-      timestamp: Date.now(),
-    }]);
+  // /stats 触发 —— 显示真实统计数据
+  const handleShowStats = useCallback(async () => {
+    try {
+      const res = await window.nahidaAPI?.invoke('stats:get', {}) as { ok: boolean; summary?: string } | undefined;
+      const summary = res?.ok && res.summary ? res.summary : '（轻托腮）……统计数据暂时拿不到，再试试？';
+
+      setMessages(prev => [...prev, {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: summary,
+        timestamp: Date.now(),
+      }]);
+    } catch (err) {
+      console.error('[ChatPanel] stats:get failed:', err);
+      setMessages(prev => [...prev, {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: '（虚空屏暗了一瞬）……统计模块好像睡着了，让我看看。',
+        timestamp: Date.now(),
+      }]);
+    }
   }, []);
 
   // 打开设置
