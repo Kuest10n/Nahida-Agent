@@ -12,9 +12,8 @@
  */
 
 import { spawn, ChildProcess } from 'child_process';
-import { resolve, join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
-import { getConfig } from '../config/config';
+import { resolve } from 'path';
+import { existsSync } from 'fs';
 
 /** Python 环境配置 */
 interface PythonEnv {
@@ -41,7 +40,6 @@ const runningServices = new Map<string, ChildProcess>();
  *   3. 系统 Python（PATH 中的 python）
  */
 function resolvePythonPath(): string {
-  const config = getConfig();
   const customPath = process.env.NAHIDA_PYTHON_PATH;
 
   // 用户指定路径
@@ -213,7 +211,7 @@ export function stopPythonService(script: string): boolean {
  */
 export function cleanupAllServices(): void {
   let count = 0;
-  for (const [script, proc] of runningServices) {
+  for (const [, proc] of runningServices) {
     if (!proc.killed) {
       proc.kill('SIGTERM');
       count++;
@@ -233,7 +231,7 @@ export function cleanupAllServices(): void {
  * @param requirementsPath requirements.txt 路径
  */
 export async function installDependencies(requirementsPath: string): Promise<void> {
-  const env = await initPythonEnv();
+  await initPythonEnv();
 
   if (!existsSync(requirementsPath)) {
     throw new Error(`requirements.txt not found: ${requirementsPath}`);

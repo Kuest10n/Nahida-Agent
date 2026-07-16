@@ -19,6 +19,7 @@
 
 import { z } from 'zod';
 import { registerTools, type ToolDefinition, type ToolResult } from './registry';
+import { emailSendSchema, emailReceiveSchema, emailSend, emailReceive } from '../mcp/servers/email-mcp-server';
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -86,61 +87,6 @@ const clockTool: ToolDefinition = {
 };
 
 // ── 工具 2：web_fetch（抓取网页正文） ─────────────────────────
-
-/** 高可信域名白名单 */
-const HIGH_CRED_DOMAINS = [
-  'wikipedia.org',
-  'gov.cn',
-  'gov',
-  'edu.cn',
-  'edu',
-  'microsoft.com',
-  'apple.com',
-  'github.com',
-  'stackoverflow.com',
-  'npmjs.com',
-  'python.org',
-  'nodejs.org',
-];
-
-/** 低可信域名黑名单 */
-const LOW_CRED_DOMAINS = [
-  'bit.ly',
-  'tinyurl.com',
-  'pastebin.com',
-  'reddit.com', // 用户生成内容
-];
-
-/**
- * 评估 URL 来源可信度
- *
- * 返回 'high' | 'medium' | 'low'
- */
-function evaluateSourceCred(url: string): 'high' | 'medium' | 'low' {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.toLowerCase();
-
-    // 黑名单直接低可信
-    for (const domain of LOW_CRED_DOMAINS) {
-      if (hostname === domain || hostname.endsWith(`.${domain}`)) {
-        return 'low';
-      }
-    }
-
-    // 白名单高可信
-    for (const domain of HIGH_CRED_DOMAINS) {
-      if (hostname === domain || hostname.endsWith(`.${domain}`)) {
-        return 'high';
-      }
-    }
-
-    // 其他域名中等可信
-    return 'medium';
-  } catch {
-    return 'low';
-  }
-}
 
 function isSafeUrl(url: string): boolean {
   try {
@@ -553,6 +499,30 @@ const fileWriteTool: ToolDefinition = {
   },
 };
 
+// ── 工具 8：email_send（发送邮件） ────────────────────────────
+
+const emailSendTool: ToolDefinition = {
+  name: 'email_send',
+  description: '发送邮件（SMTP）。需要提供收件人、主题和正文。当用户要求"发邮件""给某人发信"时调用。',
+  parameters: emailSendSchema,
+  async execute(params: Record<string, unknown>): Promise<ToolResult> {
+    const parsed = emailSendSchema.parse(params);
+    return emailSend(parsed);
+  },
+};
+
+// ── 工具 9：email_receive（接收邮件） ─────────────────────────
+
+const emailReceiveTool: ToolDefinition = {
+  name: 'email_receive',
+  description: '接收邮件列表（IMAP）。列出收件箱中的邮件，包含发件人、主题和日期。当用户要求"看看邮件""收件箱有什么"时调用。',
+  parameters: emailReceiveSchema,
+  async execute(params: Record<string, unknown>): Promise<ToolResult> {
+    const parsed = emailReceiveSchema.parse(params);
+    return emailReceive(parsed);
+  },
+};
+
 // ── 注册入口 ────────────────────────────────────────────────
 
 /**
@@ -561,6 +531,9 @@ const fileWriteTool: ToolDefinition = {
  * 在主进程启动时调用一次。
  */
 export function registerBuiltinTools(): void {
-  registerTools([clockTool, webFetchTool, searchTool, translateTool, weatherTool, fileReadTool, fileWriteTool]);
-  console.log('[Tools] builtin tools registered: clock, web_fetch, search, translate, weather, file_read, file_write');
+  registerTools([
+    clockTool, webFetchTool, searchTool, translateTool, weatherTool,
+    fileReadTool, fileWriteTool, emailSendTool, emailReceiveTool,
+  ]);
+  console.log('[Tools] builtin tools registered: clock, web_fetch, search, translate, weather, file_read, file_write, email_send, email_receive');
 }

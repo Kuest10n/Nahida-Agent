@@ -228,7 +228,7 @@ export function playAction(options: PlayActionOptions): void {
  *  currentPriority 被反复重置成 0，下一帧又触发同 priority 的 motion，循环播放同一组动作
  */
 let motionFinishBound = false;
-function playMotion(group: string, index: number, priority: number): void {
+function playMotion(group: string, index: number, _priority: number): void {
   if (!model) return;
 
   try {

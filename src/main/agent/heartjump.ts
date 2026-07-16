@@ -22,7 +22,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { NahidaEmotion, resolveActionEmotion, emotionEnumToCn } from '../../shared/types/emotion';
+import { NahidaEmotion, emotionEnumToCn } from '../../shared/types/emotion';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ let historyPattern: HistoryPattern = {
  * @returns 心动检测结果
  */
 export function detectHeartjump(
-  userMessage: string,
+  _userMessage: string,
   assistantOutput: string,
   emotion: NahidaEmotion,
   actionTag: string,

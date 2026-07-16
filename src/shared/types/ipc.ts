@@ -23,6 +23,11 @@ export enum IpcChannel {
   FEEDBACK_OPEN = 'feedback:open',
   STATS_GET = 'stats:get',
   STATS_GET_CHART = 'stats:get-chart',
+  BALANCE_GET = 'balance:get',
+  STT_START = 'stt:start',
+  STT_STOP = 'stt:stop',
+  STT_RESULT = 'stt:result',
+  EXPORT_CONVERSATION = 'export:conversation',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -254,9 +259,25 @@ export const statsGetChartResultSchema = z.object({
     dates: z.array(z.string()),
     tokens: z.array(z.number()),
     conversations: z.array(z.number()),
+    modelDistribution: z.object({
+      labels: z.array(z.string()),
+      values: z.array(z.number()),
+    }),
   }).optional(),
 });
 export type StatsGetChartResultPayload = z.infer<typeof statsGetChartResultSchema>;
+
+// ---------- balance:get（获取 API 余额） ----------
+export const balanceGetSchema = z.object({});
+export type BalanceGetPayload = z.infer<typeof balanceGetSchema>;
+
+export const balanceGetResultSchema = z.object({
+  ok: z.boolean(),
+  summary: z.string().optional(),
+  provider: z.string().optional(),
+  error: z.string().optional(),
+});
+export type BalanceGetResultPayload = z.infer<typeof balanceGetResultSchema>;
 
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
@@ -281,6 +302,15 @@ export const ipcSchemas = {
   [IpcChannel.FEEDBACK_OPEN]: feedbackOpenSchema,
   [IpcChannel.STATS_GET]: statsGetSchema,
   [IpcChannel.STATS_GET_CHART]: statsGetChartSchema,
+  [IpcChannel.BALANCE_GET]: balanceGetSchema,
+  [IpcChannel.STT_START]: z.object({}).passthrough(),
+  [IpcChannel.STT_STOP]: z.object({}),
+  [IpcChannel.STT_RESULT]: z.object({}).passthrough(),
+  [IpcChannel.EXPORT_CONVERSATION]: z.object({
+    sessionId: z.string(),
+    format: z.enum(['markdown', 'json']),
+    includeMetadata: z.boolean().optional(),
+  }),
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

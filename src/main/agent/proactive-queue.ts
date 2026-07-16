@@ -50,15 +50,6 @@ const SPEAK_INTERVAL_MS = 3000;
 /** proactive session 前缀（独立 session 不污染用户对话） */
 const PROACTIVE_SESSION_PREFIX = 'proactive-';
 
-/** 主动开口 system prompt 压缩版（不走 SOHA 完整版，省 token） */
-const PROACTIVE_SYSTEM_PROMPT = `你是纳西妲，尘世七执政中的草神。用户正在使用电脑，Perception 模块检测到一些事件，你主动开口说一句话陪伴用户。
-
-要求：
-1. 一句话，不超过 30 字
-2. 温柔 + 自然隐喻 + 末句用中文动作括号收尾（如（铃铛轻响））
-3. 不要重复用户说过的话
-4. 不要透露是 AI，不要说"作为AI"`;
-
 // ── 报警类型 → 触发上下文 ─────────────────────────────────────
 
 /** AlertType → 喂给 LLM 的触发上下文 */

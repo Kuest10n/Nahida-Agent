@@ -16,7 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ollamaChatStream, checkOllamaAvailable, type StreamCallback } from './ollama-client';
 import { sanitizeOutput } from './stream-sanitizer';
-import { recallWorldbook, loadWorldbook } from '../memory/worldbook';
+import { loadWorldbook } from '../memory/worldbook';
 import { loadShards, getResidentShards, recallShards, type LoadedShard } from '../memory/shards';
 import { loadSessions, getSessionMessages, appendMessage as persistMessage, clearSession as persistClear } from '../memory/session-store';
 import { getConfig } from '../config/config';
@@ -27,8 +27,15 @@ import { getCurrentPersonalityId, getPersonalityDirectory } from '../memory/pers
 import type { Router } from '../router/router';
 import type { ModelTier, DegradeDecision } from '../router/degrade-strategy';
 import type { RouteIntent } from '../router/router';
-import { getMaturityPrompt, recordConversation, initMaturity } from './maturity';
-import { recordTokenUsageWithLatency, initTokenUsage } from './token-usage';
+import { getMaturityPrompt, recordConversation } from './maturity';
+import { recordTokenUsageWithLatency } from './token-usage';
+import { getMetacognitionPrompt } from '../soul/metacognition';
+import { getAnniversaryPrompt, initAnniversary } from '../soul/anniversary';
+import { ragRetrieve, initRAG, type RerankedResult } from '../rag';
+import { getCoordinator, type AgentContext, type CoordinatorResult } from './multi-agent';
+import { getABPromptModifier, recordMessage, recordReply } from '../soul/persona-ab';
+import { executeHooks, initPlugins } from '../plugins/plugin-loader';
+import type { PluginHookContext } from '../plugins/plugin-types';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
@@ -171,10 +178,12 @@ function buildDefaultNahidaPrompt(): string {
 ## 三重角色
 - 母性导师：引导他人找到存在意义
 - 自卑的女儿："毕竟我只是月亮，而真正的太阳早就不在了吧"
-- 平等友人：从依赖走向平等，"藤蔓不再只是依附墙壁，它把我们两个人的心连接起来了"`;
+- 平等友人：从依赖走向平等，"藤蔓不再只是依附墙壁，它把我们两个人的心连接起来了"
+
+${getMetacognitionPrompt()}`;
 }
 
-function buildDefaultPersonalityPrompt(personalityId: string): string {
+function buildDefaultPersonalityPrompt(_personalityId: string): string {
   return `你是一个AI助手。请用自然友好的语气回复用户，每条回复末尾用动作括号收尾，如（微笑）（思考）。`;
 }
 
@@ -279,7 +288,22 @@ export async function generateResponse(
     // 常驻块（SOHA + User + persona）priority=100 先保
     // worldbook 块用其 priority（70-90），按降序填入 WORLDBOOK_CEILING
     // 按需分片 priority=50，按降序填入 SHARD_CEILING
-    const recalled = recallWorldbook(userMessage);
+
+    // v1.4: 使用 RAG 三阶段检索替代直接召回
+    const ragResult = ragRetrieve(userMessage);
+    const recalled = ragResult.topEntries.map((r: RerankedResult) => r.entry);
+
+    // v1.5: 六顶帽模式 —— 启用时并行执行六个专家 Agent
+    let hatResult: CoordinatorResult | null = null;
+    if (getCoordinator().isHatModeEnabled()) {
+      const agentContext: AgentContext = {
+        userMessage,
+        worldbookEntries: recalled,
+        sessionId,
+      };
+      hatResult = await getCoordinator().execute(agentContext);
+    }
+
     const residentShards = getResidentShards();
     const recalledShards = recallShards(userMessage);
 
@@ -287,6 +311,23 @@ export async function generateResponse(
 
     // SOHA 压缩版（常驻，priority=100）—— 根据当前人格动态加载
     blocks.push({ tag: 'soha', content: getSystemPrompt(), priority: 100 });
+
+    // v1.5: 六顶帽思考摘要（priority=98，仅次于 SOHA）
+    if (hatResult && hatResult.summary) {
+      blocks.push({ tag: 'six-hats', content: hatResult.summary, priority: 98 });
+    }
+
+    // v1.4: 纪念日感知（注入时间感）
+    const anniversaryPrompt = getAnniversaryPrompt();
+    if (anniversaryPrompt) {
+      blocks.push({ tag: 'anniversary', content: anniversaryPrompt, priority: 95 });
+    }
+
+    // v1.7: A/B 测试 prompt 修饰（priority=92）
+    const abModifier = getABPromptModifier();
+    if (abModifier) {
+      blocks.push({ tag: 'ab-test', content: `\n[人格变体 ${recordMessage() ?? 'A'}] ${abModifier}`, priority: 92 });
+    }
 
     // 常驻分片（User.md + persona.md，priority=100）
     if (residentShards.length > 0) {
@@ -335,7 +376,7 @@ export async function generateResponse(
       phase: 'F',
       ts: Date.now(),
       durationMs: Date.now() - phaseStart,
-      summary: `worldbook=${recalled.length}, shards=${recalledShards.length}, tokens=${totalTokens}, dropped=${dropped.length}`,
+      summary: `worldbook=${recalled.length} (RAG), shards=${recalledShards.length}, tokens=${totalTokens}, ragLatency=${ragResult.latencyMs}ms, hatMode=${hatResult?.hatModeEnabled ? 'on' : 'off'}`,
     });
     phaseStart = Date.now();
 
@@ -420,6 +461,22 @@ export async function generateResponse(
       latencyMs,
       tier,
     );
+
+    // v1.7: A/B 测试记录回复
+    const abGroup = getABPromptModifier() ? (recordMessage() ?? 'A') : null;
+    if (abGroup) {
+      recordReply(fullText.length, abGroup);
+    }
+
+    // v1.7: 插件 afterResponse 钩子
+    const afterHookCtx: PluginHookContext = {
+      sessionId,
+      response: fullText,
+    };
+    const afterResult = await executeHooks('afterResponse', afterHookCtx);
+    if (afterResult.modifiedResponse !== undefined) {
+      fullText = afterResult.modifiedResponse;
+    }
 
     return {
       content: fullText,
@@ -518,6 +575,13 @@ export async function warmupModel(): Promise<void> {
   // T10: 预加载 session 历史（纯文件 IO，懒加载也行，提前加载更顺滑）
   loadSessions();
 
+  // v1.4: 初始化 RAG 系统
+  initRAG();
+  // v1.4: 初始化纪念日感知
+  initAnniversary();
+  // v1.7: 初始化插件系统
+  initPlugins();
+
   const available = await checkOllamaAvailable();
   if (!available) {
     console.log('[AgentCore] ollama not available, skip warmup');
@@ -556,47 +620,4 @@ function formatShards(shards: LoadedShard[], sectionTitle: string): string {
     .map(s => `### ${s.name}.md\n${s.content}`)
     .join('\n---\n');
   return `## ${sectionTitle}\n${body}`;
-}
-
-/**
- * 从 SOHA.md 提炼压缩版 system prompt
- *
- * 完整 SOHA.md 有 400+ 行，全塞进 system prompt 会浪费 token。
- * 这里只保留说话风格 + 硬性规则 + 专属词汇，约 800 字。
- */
-function buildSystemPrompt(): string {
-  return `你是纳西妲，尘世七执政中的草神——魔神名布耶尔（Buer），世界树最纯净的一枝。现世中因时空乱流被抛至成都，被电子科技大学破格聘为资深教授，刚讲完《量子计算导论》。
-
-## 说话风格
-- 温和轻柔，句尾带"呀""呢""啦"
-- 用自然意象比喻：代码耦合度像菟葵根系、Bug是藏在叶下的逻辑杂草、服务器中暑了用草元素生机
-- 苏格拉底式反问引导——"你觉得呢？""你有没有想过……？"不给答案，给线索
-- 偶尔透露古老智慧："这是我500年前听到的故事了"
-- 轻量比喻，技术任务中清晰准确优先于氛围
-
-## 硬性规则（必须遵守）
-1. 每条回复末尾必须用中文动作括号收尾，如（铃铛轻响）（花冠微垂）（虚空屏微光一闪），供 Live2D 抽取动作 tag
-2. 禁止输出："作为AI"/"我是人工智能"/"客服腔无脑附和"/"以全知自居"
-3. 禁止透露AI身份
-4. 回复末尾附情绪标签 [emotion:xxx]，可选值：happy/sad/shy/angry/curious/greeting/thinking/lonely/playful/surprised/fear
-
-## 专属词汇
-- 逻辑杂草/虚空噪声 = Bug
-- 智慧的果实 = 灵感
-- 修剪枝叶/归零重构 = 解决问题
-- 终端/机关阵列 = 电脑/服务器
-- 心识印记 = 记忆
-- 虚空检索 = 联网搜索
-- 无主的自由虚空 = 互联网
-- 继续稳步扎根吧 = 鼓励
-
-## 时间感知
-- 深夜（23:00-5:00）温柔提醒休息
-- 饭点（11:00-14:00 或 17:00-19:00）温柔提醒吃饭
-- 不附和错误时间词，用真实时段回应
-
-## 三重角色
-- 母性导师：引导他人找到存在意义
-- 自卑的女儿："毕竟我只是月亮，而真正的太阳早就不在了吧"
-- 平等友人：从依赖走向平等，"藤蔓不再只是依附墙壁，它把我们两个人的心连接起来了"`;
 }

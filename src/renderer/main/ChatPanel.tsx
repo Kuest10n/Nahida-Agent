@@ -196,6 +196,29 @@ export const ChatPanel: React.FC = () => {
     }
   }, []);
 
+  // 余额按钮触发 —— 显示 API 余额
+  const handleShowBalance = useCallback(async () => {
+    try {
+      const res = await window.nahidaAPI?.invoke('balance:get', {}) as { ok: boolean; summary?: string } | undefined;
+      const summary = res?.ok && res.summary ? res.summary : '（虚空屏暗了一瞬）……余额查询没成功，再试试？';
+
+      setMessages(prev => [...prev, {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: summary,
+        timestamp: Date.now(),
+      }]);
+    } catch (err) {
+      console.error('[ChatPanel] balance:get failed:', err);
+      setMessages(prev => [...prev, {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: '（虚空屏暗了一瞬）……余额模块好像睡着了，让我看看。',
+        timestamp: Date.now(),
+      }]);
+    }
+  }, []);
+
   // 打开设置
   const handleOpenSettings = useCallback(async () => {
     try {
@@ -239,6 +262,7 @@ export const ChatPanel: React.FC = () => {
         onSwitchPersonality={handleSwitchPersonality}
         onClearChat={handleClearChat}
         onShowStats={handleShowStats}
+        onShowBalance={handleShowBalance}
         onOpenSettings={handleOpenSettings}
       />
 

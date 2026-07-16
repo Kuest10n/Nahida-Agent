@@ -20,15 +20,6 @@ import { z } from 'zod';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
-/** QQ 消息 */
-interface QQMessage {
-  id: string;
-  sender: string;
-  target: string;
-  content: string;
-  timestamp: number;
-}
-
 /** MCP Server 配置 */
 interface QQMcpConfig {
   apiEndpoint: string;
@@ -61,7 +52,7 @@ export const qqListSchema = z.object({
  *
  * TODO: 集成 QQ Bot API 或第三方协议库
  */
-export async function qqSend(params: z.infer<typeof qqSendSchema>): Promise<{
+export async function qqSend(_params: z.infer<typeof qqSendSchema>): Promise<{
   ok: boolean;
   data: unknown;
 }> {
@@ -77,7 +68,7 @@ export async function qqSend(params: z.infer<typeof qqSendSchema>): Promise<{
  *
  * TODO: 集成 QQ Bot API 或第三方协议库
  */
-export async function qqReceive(params: z.infer<typeof qqReceiveSchema>): Promise<{
+export async function qqReceive(_params: z.infer<typeof qqReceiveSchema>): Promise<{
   ok: boolean;
   data: unknown;
 }> {
@@ -93,7 +84,7 @@ export async function qqReceive(params: z.infer<typeof qqReceiveSchema>): Promis
  *
  * TODO: 集成 QQ Bot API 或第三方协议库
  */
-export async function qqList(params: z.infer<typeof qqListSchema>): Promise<{
+export async function qqList(_params: z.infer<typeof qqListSchema>): Promise<{
   ok: boolean;
   data: unknown;
 }> {

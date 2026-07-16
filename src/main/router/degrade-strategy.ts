@@ -110,7 +110,6 @@ export class DegradeStrategy {
     let lastReason: DegradeReason | undefined;
 
     for (const tier of tiers) {
-      const circuit = this.circuits[tier];
       const isOpen = this.isCircuitOpen(tier, now);
 
       if (isOpen) {
@@ -151,7 +150,7 @@ export class DegradeStrategy {
    * @param tier  失败的 Tier
    * @param reason 失败原因
    */
-  reportFailure(tier: ModelTier, reason: DegradeReason): void {
+  reportFailure(tier: ModelTier, _reason: DegradeReason): void {
     // local Tier 不熔断（底层兜底，熔了就没路了）
     if (tier === 'local') return;
 

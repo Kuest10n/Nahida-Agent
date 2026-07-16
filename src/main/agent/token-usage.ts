@@ -263,15 +263,37 @@ export function getTokenStatsSummary(): string {
   return lines.join('\n');
 }
 
-/** 获取折线图数据（Chart.js 用） */
-export function getChartData(): { dates: string[]; tokens: number[]; conversations: number[] } {
+/** 获取图表数据（Chart.js 用） */
+export function getChartData(): {
+  dates: string[];
+  tokens: number[];
+  conversations: number[];
+  modelDistribution: { labels: string[]; values: number[] };
+} {
   if (!initialized) initTokenUsage();
 
   const dates = data.dailyStats.map(d => d.date);
   const tokens = data.dailyStats.map(d => d.totalTokens);
   const conversations = data.dailyStats.map(d => d.conversationCount);
 
-  return { dates, tokens, conversations };
+  // 模型使用分布（累计所有天数）
+  const modelTotals: Record<string, number> = {};
+  for (const day of data.dailyStats) {
+    for (const [model, count] of Object.entries(day.modelUsage)) {
+      modelTotals[model] = (modelTotals[model] ?? 0) + count;
+    }
+  }
+  const sorted = Object.entries(modelTotals).sort((a, b) => b[1] - a[1]);
+
+  return {
+    dates,
+    tokens,
+    conversations,
+    modelDistribution: {
+      labels: sorted.map(([name]) => name),
+      values: sorted.map(([, count]) => count),
+    },
+  };
 }
 
 /** 重置当前会话统计（新会话开始时调用） */

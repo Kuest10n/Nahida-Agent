@@ -39,14 +39,6 @@ const KEYTAR_SERVICE = 'nahida-agent';
 /** 账户名（keytar 用） */
 const KEYTAR_ACCOUNT = 'encryption-master-key';
 
-/** 加密结果（拆分存储，便于转 Base64 字符串） */
-interface EncryptionResult {
-  iv: Buffer;
-  tag: Buffer;
-  ciphertext: Buffer;
-  salt?: Buffer; // PBKDF2 的盐，用 PIN 派生时才有
-}
-
 /** 加密模式 */
 export type EncryptionMode = 'disabled' | 'pin' | 'keytar';
 

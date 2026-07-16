@@ -151,7 +151,7 @@ async function loadModel(modelPath: string): Promise<void> {
  * @returns 完整响应文本
  */
 export async function localChatStream(
-  model: string,
+  _model: string,
   messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
   onDelta: (delta: string, done: boolean) => void,
   options?: { temperature?: number; maxTokens?: number },
@@ -176,7 +176,7 @@ export async function localChatStream(
 
   try {
     // 流式推理
-    const response = await session.chat(chatHistory, {
+    await session.chat(chatHistory, {
       temperature: options?.temperature ?? 0.7,
       maxTokens: options?.maxTokens ?? 2048,
       onToken: (tokens: string[]) => {

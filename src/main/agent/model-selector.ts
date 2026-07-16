@@ -79,8 +79,6 @@ export interface ModelSelectionRequest {
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 /** 熔断恢复时间（ms）：熔断后多久尝试恢复 */
 const CIRCUIT_RECOVERY_MS = 60_000; // 1 分钟
-/** 健康检查超时（ms） */
-const HEALTH_CHECK_TIMEOUT_MS = 5_000;
 
 // ── 模块状态 ──────────────────────────────────────────────────
 

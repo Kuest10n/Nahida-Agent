@@ -14,6 +14,11 @@ const INVOKE_CHANNELS = new Set<string>([
   IpcChannel.PERSONALITY_SWITCH,
   IpcChannel.PERSONALITY_CREATE,
   IpcChannel.PERSONALITY_DELETE,
+  IpcChannel.BALANCE_GET,
+  IpcChannel.STT_START,
+  IpcChannel.STT_STOP,
+  IpcChannel.STT_RESULT,
+  IpcChannel.EXPORT_CONVERSATION,
 ]);
 
 // 渲染层能监听的通道（main → renderer 单向推）

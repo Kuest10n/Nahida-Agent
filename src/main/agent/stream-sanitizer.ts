@@ -57,7 +57,6 @@ export class StreamSanitizer {
 
     // 检查是否进入 think 块
     const thinkOpen = THINK_OPEN;
-    const thinkClose = THINK_CLOSE;
 
     if (!this.inThinkBlock) {
       // 检查是否有完整的 think 开标签
@@ -107,7 +106,6 @@ export class StreamSanitizer {
    */
   private consumeThinkBlock(): string {
     const thinkClose = THINK_CLOSE;
-    const thinkOpen = THINK_OPEN;
     let result = '';
 
     while (this.inThinkBlock) {

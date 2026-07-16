@@ -1,4 +1,4 @@
-import { globalShortcut, BrowserWindow, ipcMain } from 'electron';
+import { globalShortcut, BrowserWindow } from 'electron';
 
 export interface ShortcutOptions {
   mainWindow: BrowserWindow;

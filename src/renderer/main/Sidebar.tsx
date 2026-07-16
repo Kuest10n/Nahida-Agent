@@ -6,6 +6,7 @@ interface SidebarProps {
   onSwitchPersonality: (personalityId: string) => Promise<void>;
   onClearChat: () => void;
   onShowStats: () => void;
+  onShowBalance?: () => void;
   onOpenSettings?: () => void;
 }
 
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSwitchPersonality,
   onClearChat,
   onShowStats,
+  onShowBalance,
   onOpenSettings,
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -131,6 +133,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <span style={{ fontSize: 16 }}>📊</span>
         {expanded && <span>统计</span>}
+      </button>
+
+      {/* 余额 */}
+      <button
+        style={buttonStyle}
+        onClick={onShowBalance}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#e8f5e9'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+        title="API 余额"
+      >
+        <span style={{ fontSize: 16 }}>💰</span>
+        {expanded && <span>余额</span>}
       </button>
 
       {/* 设置 */}

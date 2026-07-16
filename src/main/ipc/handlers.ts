@@ -10,9 +10,41 @@ import { TtsScheduler, GptSoVitsAdapter } from '../tts';
 import { consumePendingReports } from '../agent/rand-error';
 import { setAutoStart, isAutoStartEnabled } from '../tray/autostart';
 import { updateTrayStatus } from '../tray/tray-manager';
-import { getCurrentPersonality, listPersonalities, setCurrentPersonality, createPersonality, deletePersonality, initPersonalityManager } from '../memory/personality-manager';
+import { getCurrentPersonality, listPersonalities, setCurrentPersonality, createPersonality, deletePersonality } from '../memory/personality-manager';
 import { getConfig, saveConfigToDisk } from '../config/config';
 import { getTokenStatsSummary, getChartData } from '../agent/token-usage';
+import { queryDeepSeekBalance, formatBalanceSummary } from '../api/balance';
+import { recordInteraction } from '../soul/dream';
+import { getForgettingStats } from '../soul/forgetting';
+import { getDreamStatus } from '../soul/dream';
+import { getMetacognitionStats, analyze as analyzeMetacognition, appendMetacognitionHint } from '../soul/metacognition';
+import { getCoordinator } from '../agent/multi-agent';
+import { requestReset, executeReset, getResetReport } from '../soul/reset';
+import { startABTest, stopABTest, getABStats, formatABStats, switchGroup } from '../soul/persona-ab';
+import { formatPluginList, enablePlugin, disablePlugin } from '../plugins/plugin-loader';
+import { startSTT, stopSTT, receiveResult, switchBackend, getSTTState, type STTResult } from '../voice/stt';
+import { startWakeup, stopWakeup, toggleWakeup, getWakeupState } from '../voice/voice-wakeup';
+import { exportConversation, getDefaultExportPath, type ExportFormat } from '../memory/exporter';
+import { getPomodoroState } from '../tools/pomodoro';
+import { getTool } from '../tools/registry';
+import { buildPackage } from '../community/package-builder';
+import {
+  installPackage,
+  listAvailablePackages,
+  getPackageInfo,
+} from '../community/package-installer';
+import {
+  initGroupChat,
+  createGroup,
+  listGroups,
+  getGroup,
+  deleteGroup,
+  addAgent,
+  removeAgent,
+  setTokenLimit,
+  broadcastMessage,
+  getAvailablePersonalities,
+} from '../agent/group-chat/group-chat';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -25,16 +57,26 @@ const ttsScheduler = new TtsScheduler(new GptSoVitsAdapter());
 // ── 命令意图的预设回复（不走模型，省 token） ──
 const COMMAND_RESPONSES: Record<CommandType, string> = {
   '/clear': '（花冠微垂，指尖轻拂虚空屏）……心识印记已清空，新的对话开始啦。',
-  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats /switch-persona',
+  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats /switch-persona /balance /hat /pomodoro /package /wakeup',
   '/switch-model': '（虚空屏微光一闪）……模型切换功能还在生长中，再等等吧。',
   '/stats': '（轻托腮）……统计功能还在生长中，再等等吧。',
   '/switch-persona': '（花冠微颤）……人格切换功能已就绪，试试 /switch-persona nahida 或 /switch-persona ti-bao 吧。',
+  '/balance': '（指尖轻点虚空屏）……余额查询正在路上。',
+  '/hat': '（花冠轻转）……六顶帽模式已切换。',
+  '/reset': '（花冠微垂，神情凝重）……重置请求已收到。',
+  '/ab': '（花冠轻转）……A/B 测试模式已切换。',
+  '/plugin': '（虚空屏微光一闪）……插件管理。',
+  '/pomodoro': '（花冠轻转）……番茄钟专注模式。',
+  '/package': '（指尖虚空拨动）……社区共享包管理。',
+  '/wakeup': '（花冠轻转）……语音唤醒模式。',
+  '/group': '（花冠轻转）……群聊模式。',
 };
 
 // T5 Agent 编排：路由层 → generateResponse → 四审 → live2d action
 export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: BrowserWindow): void {
   // agent:chat —— 收到消息后走路由层 → 真实模型流式推送 → 四审 → live2d action
   registerValidatedHandler(IpcChannel.AGENT_CHAT, async (_event: IpcMainInvokeEvent, payload: AgentChatPayload) => {
+    recordInteraction(); // 灵魂三维：记录用户交互（打断梦境）
     const sessionId = payload.sessionId ?? 'test-session';
     const message = payload.message;
 
@@ -64,7 +106,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         router.resetSessionGuardrails(sessionId);
         ttsScheduler.clearCache();
       }
-      
+
       if (routeResult.command === '/switch-persona') {
         const match = message.match(/\/switch-persona\s+(\S+)/);
         if (match && match[1]) {
@@ -79,8 +121,465 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         } else {
           fullOutput = COMMAND_RESPONSES['/switch-persona'];
         }
-      } else {
-        fullOutput = COMMAND_RESPONSES[routeResult.command ?? '/help'];
+      } else if (routeResult.command === '/balance') {
+        // /balance：查询云端 API 余额（v1.2.x 补丁）
+        const balanceResult = await queryDeepSeekBalance();
+        fullOutput = formatBalanceSummary(balanceResult);
+      } else if (routeResult.command === '/hat') {
+        // /hat：切换六顶帽模式（v1.5 多 Agent 协作）
+        const enabled = getCoordinator().toggleHatMode();
+        fullOutput = enabled
+          ? '（花冠轻转，六片花瓣依次亮起）……六顶帽思考模式已启用，从现在开始，每个回复都会经过多角度审视哦。'
+          : '（花冠微垂，花瓣渐暗）……六顶帽思考模式已关闭，回归自然对话啦。';
+      } else if (routeResult.command === '/reset') {
+        // /reset：一键重置（v1.6 安全功能）
+        if (message.trim() === '/reset confirm') {
+          const resetResult = executeReset();
+          fullOutput = getResetReport(resetResult);
+        } else if (message.trim() === '/reset') {
+          const resetRequest = requestReset();
+          fullOutput = resetRequest.message;
+        } else {
+          fullOutput = '（花冠微垂）……请发送 `/reset` 请求重置，或 `/reset confirm` 确认重置。';
+        }
+      } else if (routeResult.command === '/ab') {
+        // /ab：A/B 测试管理（v1.7 人格分叉）
+        const trimmed = message.trim();
+        if (trimmed === '/ab start') {
+          const result = startABTest();
+          fullOutput = result.message;
+        } else if (trimmed === '/ab stop') {
+          const result = stopABTest();
+          fullOutput = result.message;
+        } else if (trimmed === '/ab stats') {
+          const stats = getABStats();
+          fullOutput = formatABStats(stats);
+        } else if (trimmed === '/ab switch') {
+          const result = switchGroup();
+          fullOutput = result.message;
+        } else {
+          fullOutput = '（花冠轻转）……A/B 测试命令：\n`/ab start` 启动测试\n`/ab stop` 停止测试\n`/ab stats` 查看统计\n`/ab switch` 切换分组';
+        }
+      } else if (routeResult.command === '/plugin') {
+        // /plugin：插件管理（v1.7 插件系统）
+        const trimmed = message.trim();
+        if (trimmed === '/plugin list' || trimmed === '/plugin') {
+          fullOutput = formatPluginList();
+        } else if (trimmed.startsWith('/plugin enable ')) {
+          const pluginId = trimmed.replace('/plugin enable ', '').trim();
+          const success = enablePlugin(pluginId);
+          fullOutput = success
+            ? `（花冠轻转）……插件 ${pluginId} 已启用`
+            : `（花冠微垂）……未找到插件 ${pluginId}`;
+        } else if (trimmed.startsWith('/plugin disable ')) {
+          const pluginId = trimmed.replace('/plugin disable ', '').trim();
+          const success = disablePlugin(pluginId);
+          fullOutput = success
+            ? `（花冠微垂）……插件 ${pluginId} 已禁用`
+            : `（花冠微垂）……未找到插件 ${pluginId}`;
+        } else {
+          fullOutput = '（虚空屏微光一闪）……插件命令：\n`/plugin list` 列出插件\n`/plugin enable <id>` 启用插件\n`/plugin disable <id>` 禁用插件';
+        }
+      } else if (routeResult.command === '/stats') {
+        // /stats：返回真实统计摘要 + 灵魂三维统计
+        fullOutput = `${getTokenStatsSummary()}\n\n${getForgettingStats()}\n\n${getDreamStatus()}\n\n${getMetacognitionStats()}`;
+      } else if (routeResult.command === '/pomodoro') {
+        // /pomodoro：番茄钟管理（v1.9 专注模式）
+        const trimmed = message.trim();
+        if (trimmed === '/pomodoro' || trimmed === '/pomodoro help') {
+          fullOutput = '（花冠轻转）……番茄钟专注模式命令：\n`/pomodoro start [工作时长] [标签]` 启动番茄钟（默认 25 分钟）\n`/pomodoro stop` 停止当前番茄钟\n`/pomodoro stats` 查看今日专注统计\n`/pomodoro status` 查看当前状态';
+        } else if (trimmed === '/pomodoro start' || trimmed.startsWith('/pomodoro start ')) {
+          const state = getPomodoroState();
+          if (state.running) {
+            fullOutput = `（花冠微垂）……已有番茄钟在运行中，当前阶段：${state.phase}，剩余 ${Math.max(0, Math.floor((state.phaseEndsAt - Date.now()) / 60000))} 分钟。先 /pomodoro stop 再启动新的吧。`;
+          } else {
+            // 解析参数：/pomodoro start [工作时长] [标签...]
+            const args = trimmed.replace('/pomodoro start', '').trim();
+            let workMinutes = 25;
+            let label: string | undefined;
+            if (args) {
+              const parts = args.split(/\s+/);
+              const first = parts[0] ?? '';
+              const maybeNum = parseInt(first, 10);
+              if (!isNaN(maybeNum) && maybeNum > 0 && maybeNum <= 120) {
+                workMinutes = maybeNum;
+                label = parts.slice(1).join(' ') || undefined;
+              } else {
+                label = args;
+              }
+            }
+            const tool = getTool('pomodoro_start');
+            if (tool) {
+              const r = await tool.execute({ work_minutes: workMinutes, label }, { sessionId, userMessage: message });
+              if (r.ok) {
+                const data = r.data as { message: string; config: { workMinutes: number; breakMinutes: number }; state: { phaseEndsAt: number } };
+                fullOutput = `（花冠轻转，铃铛轻响）……${data.message}，专注「${label ?? '当前任务'}」吧。到点我会提醒你的。`;
+              } else {
+                fullOutput = '（花冠微垂）……番茄钟启动失败，请稍后再试。';
+              }
+            } else {
+              fullOutput = '（花冠微垂）……番茄钟工具未就绪。';
+            }
+          }
+        } else if (trimmed === '/pomodoro stop') {
+          const tool = getTool('pomodoro_stop');
+          if (tool) {
+            const r = await tool.execute({}, { sessionId, userMessage: message });
+            const data = r.data as { message: string; completedToday: number };
+            fullOutput = `（花冠微垂）……${data.message}。今日已完成 ${data.completedToday} 个番茄钟，辛苦了。`;
+          } else {
+            fullOutput = '（花冠微垂）……番茄钟工具未就绪。';
+          }
+        } else if (trimmed === '/pomodoro stats') {
+          const tool = getTool('pomodoro_stats');
+          if (tool) {
+            const r = await tool.execute({}, { sessionId, userMessage: message });
+            const data = r.data as {
+              today: { count: number; totalMinutes: number; totalHours: number; byLabel: Record<string, number> };
+              allTime: { count: number; totalMinutes: number; totalHours: number };
+              current: { running: boolean; phase: string; completedWorkSessions: number };
+            };
+            const labelLines = Object.entries(data.today.byLabel)
+              .map(([l, c]) => `  · ${l}: ${c} 个`)
+              .join('\n');
+            fullOutput = `（指尖虚空拨动，心识印记浮现）……今日专注统计：\n` +
+              `今日：${data.today.count} 个番茄钟，${data.today.totalMinutes} 分钟（约 ${data.today.totalHours} 小时）\n` +
+              (labelLines ? `按标签：\n${labelLines}\n` : '') +
+              `累计：${data.allTime.count} 个，${data.allTime.totalMinutes} 分钟（约 ${data.allTime.totalHours} 小时）\n` +
+              (data.current.running ? `当前：${data.current.phase} 阶段，今日已累计 ${data.current.completedWorkSessions} 个` : '当前未在专注中');
+          } else {
+            fullOutput = '（花冠微垂）……番茄钟工具未就绪。';
+          }
+        } else if (trimmed === '/pomodoro status') {
+          const state = getPomodoroState();
+          if (state.running) {
+            const remainingMin = Math.max(0, Math.floor((state.phaseEndsAt - Date.now()) / 60000));
+            const phaseLabel = state.phase === 'work' ? '工作段' : state.phase === 'break' ? '短休息' : state.phase === 'long_break' ? '长休息' : '未知';
+            fullOutput = `（指尖轻点虚空屏）……番茄钟运行中：${phaseLabel}，剩余约 ${remainingMin} 分钟${state.label ? `，专注「${state.label}」` : ''}。今日已累计 ${state.completedWorkSessions} 个。`;
+          } else {
+            fullOutput = '（花冠微垂）……当前没有运行中的番茄钟，发送 `/pomodoro start` 开始专注吧。';
+          }
+        } else {
+          fullOutput = '（花冠轻转）……番茄钟命令：\n`/pomodoro start [工作时长] [标签]` 启动\n`/pomodoro stop` 停止\n`/pomodoro stats` 统计\n`/pomodoro status` 当前状态';
+        }
+      } else if (routeResult.command === '/package') {
+          // /package：社区共享包管理（v2.0）
+          const trimmed = message.trim();
+          if (trimmed === '/package' || trimmed === '/package help') {
+            fullOutput = '（指尖虚空拨动）……社区共享包命令：\n' +
+              '`/package build <name> <display> [type=full|persona|worldbook]` 打包当前 memory/ 为 .nahida-package\n' +
+              '`/package install <包名或路径>` 安装一个 .nahida-package（自动备份）\n' +
+              '`/package list` 列举 packages/ 下的可用包\n' +
+              '`/package info <包名或路径>` 查看包详细信息';
+          } else if (trimmed.startsWith('/package list')) {
+            const list = listAvailablePackages();
+            if (list.length === 0) {
+              fullOutput = '（花冠微垂）……packages/ 目录下暂无 .nahida-package。先 `/package build` 打一个吧。';
+            } else {
+              const lines = list.map(p =>
+                `  · ${p.name} v${p.version} [${p.packageType}] - ${p.displayName}`,
+              );
+              fullOutput = `（指尖虚空拨动，心识印记浮现）……packages/ 下共 ${list.length} 个包：\n${lines.join('\n')}`;
+            }
+          } else if (trimmed.startsWith('/package info ')) {
+            const target = trimmed.replace('/package info ', '').trim();
+            const info = getPackageInfo(target);
+            if (!info.ok || !info.manifest) {
+              fullOutput = `（花冠微垂）……${info.error ?? '包信息读取失败'}`;
+            } else {
+              const m = info.manifest;
+              const contentFlags = [
+                m.contents.persona ? '人格分片' : '',
+                m.contents.worldbook ? '世界书' : '',
+                m.contents.modelfile ? '模型配置' : '',
+              ].filter(Boolean).join(' / ');
+              fullOutput = `（指尖虚空拨动）……包信息：\n` +
+                `名称：${m.displayName} (${m.name})\n` +
+                `版本：${m.version}（格式 v${m.formatVersion}）\n` +
+                `类型：${m.packageType}\n` +
+                `作者：${m.author}（${m.license}）\n` +
+                `描述：${m.description}\n` +
+                `包含：${contentFlags}\n` +
+                `兼容：[${m.compatibility.minAppVersion}, ${m.compatibility.maxAppVersion ?? '∞'}]\n` +
+                (m.tags.length > 0 ? `标签：${m.tags.join(', ')}` : '');
+            }
+          } else if (trimmed.startsWith('/package install ')) {
+            const target = trimmed.replace('/package install ', '').trim();
+            const installResult = installPackage({ packagePath: target });
+            if (installResult.ok) {
+              const backedUp = installResult.backedUpFiles.length > 0
+                ? `已备份 ${installResult.backedUpFiles.length} 个文件到 ${installResult.backupDir ?? 'memory/backup/'}`
+                : '无需备份（受保护文件未覆盖）';
+              fullOutput = `（花冠轻转，铃铛轻响）……包 ${installResult.manifest?.name ?? target} 安装成功！\n` +
+                `已安装文件：${installResult.installedFiles.length} 个\n` +
+                backedUp;
+            } else {
+              fullOutput = `（花冠微垂）……安装失败：\n${installResult.errors.join('\n')}`;
+            }
+          } else if (trimmed.startsWith('/package build ')) {
+            // /package build <name> <display> [type]
+            const argsStr = trimmed.replace('/package build ', '').trim();
+            const parts = argsStr.split(/\s+/);
+            const name = parts[0];
+            const typeRaw = parts[2] ?? 'full';
+            if (!name) {
+              fullOutput = '（花冠微垂）……用法：`/package build <name> <display> [type=full|persona|worldbook]`';
+            } else {
+              const displayName = parts[1] ?? name;
+              const packageType = (typeRaw === 'persona' || typeRaw === 'worldbook' || typeRaw === 'full')
+                ? typeRaw
+                : 'full';
+              const contents = packageType === 'persona'
+                ? { persona: true, worldbook: false, modelfile: false }
+                : packageType === 'worldbook'
+                  ? { persona: false, worldbook: true, modelfile: false }
+                  : { persona: true, worldbook: true, modelfile: false };
+              const buildResult = buildPackage({
+                name,
+                displayName,
+                description: `${displayName} - 由 Nahida Agent 打包`,
+                version: '1.0.0',
+                author: 'nahida-agent-user',
+                packageType,
+                contents,
+                minAppVersion: '2.0.0',
+                tags: [],
+              });
+              if (buildResult.ok && buildResult.packagePath) {
+                const sizeKb = (buildResult.totalSize / 1024).toFixed(1);
+                fullOutput = `（花冠轻转，铃铛轻响）……包 ${name} 打包成功！\n` +
+                  `位置：${buildResult.packagePath}\n` +
+                  `包含文件：${buildResult.includedFiles.length} 个（${sizeKb} KB）\n` +
+                  `清单：${buildResult.includedFiles.join(', ')}`;
+              } else {
+                fullOutput = `（花冠微垂）……打包失败：\n${buildResult.errors.join('\n')}`;
+              }
+            }
+          } else {
+            fullOutput = '（指尖虚空拨动）……社区共享包命令：\n' +
+              '`/package build <name> <display> [type]` 打包\n`/package install <包名>` 安装\n`/package list` 列举\n`/package info <包名>` 详情';
+          }
+        } else if (routeResult.command === '/wakeup') {
+          // /wakeup：语音唤醒管理（v2.3）
+          const trimmed = message.trim();
+          if (trimmed === '/wakeup' || trimmed === '/wakeup help') {
+            fullOutput = '（花冠轻转，铃铛轻响）……语音唤醒命令：\n' +
+              '`/wakeup on` 开启语音唤醒（需要 Whisper 模型）\n' +
+              '`/wakeup off` 关闭语音唤醒\n' +
+              '`/wakeup toggle` 切换唤醒状态\n' +
+              '`/wakeup status` 查看当前状态\n' +
+              '`/wakeup backend <web-speech|openai-whisper|whisper-cpp>` 切换 STT 后端';
+          } else if (trimmed === '/wakeup on') {
+            const result = startWakeup();
+            fullOutput = result.success
+              ? `（花冠轻转，花冠花瓣微微颤动）……${result.message}`
+              : `（花冠微垂）……${result.message}`;
+          } else if (trimmed === '/wakeup off') {
+            const result = stopWakeup();
+            fullOutput = result.success
+              ? `（花冠微垂）……${result.message}`
+              : `（花冠微垂）……${result.message}`;
+          } else if (trimmed === '/wakeup toggle') {
+            const result = toggleWakeup();
+            fullOutput = result.enabled
+              ? `（花冠轻转，铃铛轻响）……${result.message}`
+              : `（花冠微垂）……${result.message}`;
+          } else if (trimmed === '/wakeup status') {
+            const state = getWakeupState();
+            const sttState = getSTTState();
+            const statusLabel = state.state === 'listening' ? '监听中'
+              : state.state === 'detected' ? '已唤醒'
+              : state.state === 'idle' ? '已停止'
+              : state.state === 'disabled' ? '未启用'
+              : state.state;
+            fullOutput = `（指尖轻点虚空屏）……语音唤醒状态：\n` +
+              `唤醒：${statusLabel}（累计触发 ${state.counter} 次）\n` +
+              `STT 后端：${sttState.backend}\n` +
+              `监听间隔：${state.config.listenIntervalMs}ms\n` +
+              `唤醒词：${state.config.keywords.join('、')}`;
+          } else if (trimmed.startsWith('/wakeup backend ')) {
+            const backendStr = trimmed.replace('/wakeup backend ', '').trim();
+            if (backendStr === 'web-speech' || backendStr === 'openai-whisper' || backendStr === 'whisper-cpp') {
+              const result = switchBackend(backendStr);
+              fullOutput = result.success
+                ? `（花冠轻转）……${result.message}`
+                : `（花冠微垂）……${result.message}`;
+            } else {
+              fullOutput = '（花冠微垂）……后端类型有误，请选择：web-speech / openai-whisper / whisper-cpp';
+            }
+          } else {
+            fullOutput = '（花冠轻转）……语音唤醒命令：\n`/wakeup on` 开启\n`/wakeup off` 关闭\n`/wakeup toggle` 切换\n`/wakeup status` 状态\n`/wakeup backend <类型>` 切换后端';
+          }
+        } else if (routeResult.command === '/group') {
+          const trimmed = message.trim();
+          if (trimmed === '/group' || trimmed === '/group help') {
+            fullOutput = '（花冠轻转，铃铛轻响）……群聊模式命令：\n' +
+              '`/group create <群名> [成员1,成员2,...]` 创建群聊\n' +
+              '`/group list` 列出所有群聊\n' +
+              '`/group info <群ID>` 查看群详情\n' +
+              '`/group delete <群ID>` 删除群聊\n' +
+              '`/group add <群ID> <人格ID>` 添加 Agent 成员\n' +
+              '`/group remove <群ID> <成员ID>` 移除 Agent 成员\n' +
+              '`/group token <群ID> [成员ID] <token数>` 设置 token 限制\n' +
+              '`/group send <群ID> <消息>` 发送消息到群聊\n' +
+              '`/group agents` 查看可用人格列表';
+          } else if (trimmed === '/group agents') {
+            const personalities = getAvailablePersonalities();
+            if (personalities.length === 0) {
+              fullOutput = '（花冠微垂）……暂无可用人格，先创建一个吧。';
+            } else {
+              const lines = personalities.map(p =>
+                `  · ${p.id} - ${p.displayName}（${p.description}）`,
+              );
+              fullOutput = `（指尖虚空拨动，心识印记浮现）……可用人格共 ${personalities.length} 个：\n${lines.join('\n')}`;
+            }
+          } else if (trimmed.startsWith('/group create ')) {
+            const argsStr = trimmed.replace('/group create ', '').trim();
+            const parts = argsStr.split(/\s+/);
+            const groupName = parts[0];
+            if (!groupName) {
+              fullOutput = '（花冠微垂）……用法：`/group create <群名> [成员1,成员2,...]`';
+            } else {
+              const membersStr = parts.slice(1).join(' ');
+              const initialMembers = membersStr ? membersStr.split(',').map(m => m.trim()).filter(Boolean) : [];
+              const group = createGroup(groupName, initialMembers);
+              if (group) {
+                const memberNames = group.members.filter(m => m.type === 'ai').map(m => m.name).join('、');
+                fullOutput = `（花冠轻转，铃铛轻响）……群聊「${group.name}」创建成功！\n` +
+                  `群 ID：${group.groupId}\n` +
+                  `成员：旅行者 + ${memberNames || '暂无 AI 成员'}\n` +
+                  `默认 token 限制：${group.defaultTokenLimit} token`;
+              } else {
+                fullOutput = '（花冠微垂）……群聊创建失败。';
+              }
+            }
+          } else if (trimmed === '/group list') {
+            const groupsList = listGroups();
+            if (groupsList.length === 0) {
+              fullOutput = '（花冠微垂）……暂无群聊，发送 `/group create <群名>` 创建一个吧。';
+            } else {
+              const lines = groupsList.map(g => {
+                const aiCount = g.members.filter(m => m.type === 'ai').length;
+                return `  · ${g.name}（${g.groupId}）- ${aiCount} 个 AI 成员，${g.messages.length} 条消息`;
+              });
+              fullOutput = `（指尖虚空拨动，心识印记浮现）……共 ${groupsList.length} 个群聊：\n${lines.join('\n')}`;
+            }
+          } else if (trimmed.startsWith('/group info ')) {
+            const groupId = trimmed.replace('/group info ', '').trim();
+            const group = getGroup(groupId);
+            if (!group) {
+              fullOutput = '（花冠微垂）……未找到该群聊。';
+            } else {
+              const memberLines = group.members.map(m => {
+                const typeLabel = m.type === 'user' ? '（你）' : '（AI）';
+                const tokenLabel = m.tokenLimit > 0 ? `，token限制：${m.tokenLimit}` : '';
+                return `  · ${m.name}${typeLabel}${tokenLabel}`;
+              });
+              fullOutput = `（指尖虚空拨动）……群聊信息：\n` +
+                `群名：${group.name}\n` +
+                `群 ID：${group.groupId}\n` +
+                `创建时间：${new Date(group.createdAt).toLocaleString()}\n` +
+                `成员（${group.members.length}人）：\n${memberLines.join('\n')}\n` +
+                `消息数：${group.messages.length} 条\n` +
+                `默认 token 限制：${group.defaultTokenLimit}`;
+            }
+          } else if (trimmed.startsWith('/group delete ')) {
+            const groupId = trimmed.replace('/group delete ', '').trim();
+            const success = deleteGroup(groupId);
+            fullOutput = success
+              ? '（花冠微垂）……群聊已删除。'
+              : '（花冠微垂）……未找到该群聊。';
+          } else if (trimmed.startsWith('/group add ')) {
+            const argsStr = trimmed.replace('/group add ', '').trim();
+            const parts = argsStr.split(/\s+/);
+            const groupId = parts[0];
+            const personalityId = parts[1];
+            if (!groupId || !personalityId) {
+              fullOutput = '（花冠微垂）……用法：`/group add <群ID> <人格ID>`';
+            } else {
+              const success = addAgent(groupId, personalityId);
+              const personality = getAvailablePersonalities().find(p => p.id === personalityId);
+              fullOutput = success
+                ? `（花冠轻转）……已添加 ${personality?.displayName ?? personalityId} 到群聊。`
+                : '（花冠微垂）……添加失败，请检查群 ID 和人格 ID 是否正确。';
+            }
+          } else if (trimmed.startsWith('/group remove ')) {
+            const argsStr = trimmed.replace('/group remove ', '').trim();
+            const parts = argsStr.split(/\s+/);
+            const groupId = parts[0];
+            const memberId = parts[1];
+            if (!groupId || !memberId) {
+              fullOutput = '（花冠微垂）……用法：`/group remove <群ID> <成员ID>`';
+            } else {
+              const success = removeAgent(groupId, memberId);
+              fullOutput = success
+                ? '（花冠微垂）……已移除该成员。'
+                : '（花冠微垂）……移除失败，请检查群 ID 和成员 ID 是否正确。';
+            }
+          } else if (trimmed.startsWith('/group token ')) {
+            const argsStr = trimmed.replace('/group token ', '').trim();
+            const parts = argsStr.split(/\s+/);
+            if (parts.length < 2) {
+              fullOutput = '（花冠微垂）……用法：`/group token <群ID> [成员ID] <token数>`';
+            } else {
+              const groupId = parts[0]!;
+              const limitStr = parts[parts.length - 1]!;
+              const limit = parseInt(limitStr, 10);
+              const memberId = parts.length > 2 ? parts[1]! : null;
+
+              if (isNaN(limit)) {
+                fullOutput = '（花冠微垂）……token 数必须是数字。';
+              } else {
+                const success = setTokenLimit(groupId, memberId, limit);
+                fullOutput = success
+                  ? `（花冠轻转）……${memberId ? `${memberId} 的` : '默认'} token 限制已设为 ${limit}。`
+                  : '（花冠微垂）……设置失败，请检查群 ID 是否正确。';
+              }
+            }
+          } else if (trimmed.startsWith('/group send ')) {
+            const argsStr = trimmed.replace('/group send ', '').trim();
+            const firstSpace = argsStr.indexOf(' ');
+            if (firstSpace === -1) {
+              fullOutput = '（花冠微垂）……用法：`/group send <群ID> <消息>`';
+            } else {
+              const groupId = argsStr.slice(0, firstSpace);
+              const sendContent = argsStr.slice(firstSpace + 1);
+              const group = getGroup(groupId);
+              if (!group) {
+                fullOutput = '（花冠微垂）……未找到该群聊。';
+              } else if (!sendContent.trim()) {
+                fullOutput = '（花冠微垂）……消息内容不能为空。';
+              } else {
+                fullOutput = `（花冠轻转）……正在向群聊「${group.name}」广播消息，请稍候……`;
+                mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                  delta: fullOutput,
+                  finishReason: 'stop',
+                  sessionId,
+                  timestamp: Date.now(),
+                });
+
+                const replies = await broadcastMessage(
+                  groupId,
+                  sendContent,
+                  routeResult.degradeDecision,
+                );
+
+                if (replies.length === 0) {
+                  fullOutput = '（花冠微垂）……群聊中没有 AI 成员，无法回复。';
+                } else {
+                  const replyLines = replies.map(r => {
+                    const limitedTag = r.isTokenLimited ? '（已截断）' : '';
+                    return `\n${r.memberName}${limitedTag}：\n${r.content}`;
+                  });
+                  fullOutput = `（铃铛轻响，心识印记交错）……群聊回复：${replyLines.join('\n')}`;
+                }
+              }
+            }
+          } else {
+            fullOutput = '（花冠轻转）……群聊命令：\n`/group create` 创建\n`/group list` 列表\n`/group info` 详情\n`/group add` 添加成员\n`/group remove` 移除成员\n`/group token` 设置限制\n`/group send` 发送消息';
+          }
+        } else {
+          fullOutput = COMMAND_RESPONSES[routeResult.command ?? '/help'];
       }
       // 一次性推送完整回复
       mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
@@ -155,6 +654,23 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
           suggestion: r.suggestion,
           generatedAt: r.generatedAt,
         });
+      }
+    }
+
+    // ── 灵魂三维：元认知分析 ──
+    // 在流式输出完成后，分析置信度，必要时追加不确定性提示
+    const metaResult = analyzeMetacognition(fullOutput, routeResult.degradeDecision.modelId);
+    if (metaResult.shouldExpressUncertainty) {
+      const hinted = appendMetacognitionHint(fullOutput, metaResult);
+      // 如果追加了提示，通过 IPC 推送增量
+      if (hinted !== fullOutput) {
+        mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+          delta: hinted.slice(fullOutput.length),
+          finishReason: 'stop',
+          sessionId,
+          timestamp: Date.now(),
+        });
+        fullOutput = hinted;
       }
     }
 
@@ -327,6 +843,50 @@ ${payload.content}
   registerValidatedHandler(IpcChannel.STATS_GET_CHART, () => {
     const chartData = getChartData();
     return { ok: true, chartData };
+  });
+
+  // balance:get —— 获取 API 余额（渲染层 Sidebar 按钮用）
+  registerValidatedHandler(IpcChannel.BALANCE_GET, async () => {
+    const result = await queryDeepSeekBalance();
+    return {
+      ok: result.ok,
+      summary: formatBalanceSummary(result),
+      provider: result.provider,
+      error: result.error,
+    };
+  });
+
+  // v1.8: 语音输入 STT —— 开始识别
+  registerValidatedHandler(IpcChannel.STT_START, async (_event, payload) => {
+    const result = startSTT(typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : undefined);
+    return result;
+  });
+
+  // v1.8: 语音输入 STT —— 停止识别
+  registerValidatedHandler(IpcChannel.STT_STOP, async () => {
+    const result = stopSTT();
+    return result;
+  });
+
+  // v1.8: 语音输入 STT —— 接收识别结果（渲染层 → 主进程）
+  registerValidatedHandler(IpcChannel.STT_RESULT, async (_event, payload) => {
+    if (typeof payload === 'object' && payload !== null) {
+      receiveResult(payload as unknown as STTResult);
+    }
+    return { ok: true };
+  });
+
+  // v1.8: 对话导出
+  registerValidatedHandler(IpcChannel.EXPORT_CONVERSATION, async (_event, payload) => {
+    const params = payload as { sessionId: string; format: ExportFormat; includeMetadata?: boolean };
+    const filePath = getDefaultExportPath(params.sessionId, params.format);
+    const result = exportConversation({
+      sessionId: params.sessionId,
+      format: params.format,
+      filePath,
+      includeMetadata: params.includeMetadata ?? true,
+    });
+    return result;
   });
 }
 

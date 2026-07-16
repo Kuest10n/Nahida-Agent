@@ -20,15 +20,6 @@ import { z } from 'zod';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
-/** 微信消息 */
-interface WechatMessage {
-  id: string;
-  sender: string;
-  target: string;
-  content: string;
-  timestamp: number;
-}
-
 /** MCP Server 配置 */
 interface WechatMcpConfig {
   apiEndpoint: string;
@@ -61,7 +52,7 @@ export const wechatListSchema = z.object({
  *
  * TODO: 集成微信 Bot API 或第三方协议库
  */
-export async function wechatSend(params: z.infer<typeof wechatSendSchema>): Promise<{
+export async function wechatSend(_params: z.infer<typeof wechatSendSchema>): Promise<{
   ok: boolean;
   data: unknown;
 }> {
@@ -77,7 +68,7 @@ export async function wechatSend(params: z.infer<typeof wechatSendSchema>): Prom
  *
  * TODO: 集成微信 Bot API 或第三方协议库
  */
-export async function wechatReceive(params: z.infer<typeof wechatReceiveSchema>): Promise<{
+export async function wechatReceive(_params: z.infer<typeof wechatReceiveSchema>): Promise<{
   ok: boolean;
   data: unknown;
 }> {
@@ -93,7 +84,7 @@ export async function wechatReceive(params: z.infer<typeof wechatReceiveSchema>)
  *
  * TODO: 集成微信 Bot API 或第三方协议库
  */
-export async function wechatList(params: z.infer<typeof wechatListSchema>): Promise<{
+export async function wechatList(_params: z.infer<typeof wechatListSchema>): Promise<{
   ok: boolean;
   data: unknown;
 }> {

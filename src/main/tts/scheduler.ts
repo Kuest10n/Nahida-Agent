@@ -16,7 +16,6 @@
  *   if (result) { mainWindow.send(TTS_CHUNK, { audioBase64: result.audioBase64, ... }) }
  */
 
-import { NahidaEmotion } from '../../shared/types/emotion';
 import type { TtsRequest, TtsResult, TtsAdapter } from './index';
 import { VoiceCache } from './voice-cache';
 

@@ -26,7 +26,7 @@ import { DegradeStrategy, type ModelTier, type DegradeReason, type DegradeDecisi
 export type RouteIntent = 'chat' | 'think' | 'tool' | 'command' | 'unknown';
 
 /** 命令类型（预设命令） */
-export type CommandType = '/clear' | '/help' | '/switch-model' | '/stats' | '/switch-persona';
+export type CommandType = '/clear' | '/help' | '/switch-model' | '/stats' | '/switch-persona' | '/balance' | '/hat' | '/reset' | '/ab' | '/plugin' | '/pomodoro' | '/package' | '/wakeup' | '/group';
 
 /** 路由结果 */
 export interface RouteResult {
@@ -53,6 +53,15 @@ const COMMAND_PATTERNS: Record<string, CommandType> = {
   '/switch-model': '/switch-model',
   '/stats': '/stats',
   '/switch-persona': '/switch-persona',
+  '/balance': '/balance',
+  '/hat': '/hat',
+  '/reset': '/reset',
+  '/ab': '/ab',
+  '/plugin': '/plugin',
+  '/pomodoro': '/pomodoro',
+  '/package': '/package',
+  '/wakeup': '/wakeup',
+  '/group': '/group',
 };
 
 // ── 关键词意图映射 ────────────────────────────────────────────
@@ -100,7 +109,7 @@ export class Router {
    * @returns 路由结果（意图 + 降级决策 + 清洗后消息）
    */
   route(ctx: RouteContext): RouteResult {
-    const { message, sessionId } = ctx;
+    const { message } = ctx;
 
     // ── 挂点1：instruction-guard — 用户消息清洗 ──
     const injectionResult = this.instructionGuard.checkUserMessage(message);

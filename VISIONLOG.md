@@ -400,11 +400,54 @@
 - **修订号（第三位）**：bug 修复、优化、重构
   - 示例：`0.1.1` IPC 校验优化 / `0.5.3` 模型集成
 
-### 当前版本：`1.1.0`
+### v2.4.0 - 2026-07-16
 
-- 已完成：Phase 1 全部核心功能 + 日历/闹钟调度
-- 状态：v1.1.0 开发中
-- 下一步：MCP Client 接入框架
+**里程碑：群聊模块（多 Agent 群聊 + token 限制 + Agent 管理）**
+
+- **群聊核心模块**（group-chat.ts）：
+  - `GroupChat` 模型：群信息 + 成员列表 + 消息历史 + token 限制配置
+  - `AgentMember` 模型：成员类型（user/ai）+ 人格 ID + token 限制
+  - 持久化：`data/groups/{groupId}.json`，原子写（.tmp → rename）
+  - 消息存储上限：100 条，自动滚动
+- **群管理功能**：
+  - `createGroup()`：创建群聊，支持初始 AI 成员
+  - `addAgent()` / `removeAgent()`：添加/移除 AI 成员
+  - `setTokenLimit()`：设置默认或单个成员的 token 限制
+  - `listGroups()` / `getGroup()` / `deleteGroup()`：群列表与详情
+- **消息广播机制**：
+  - `broadcastMessage()`：用户消息广播到所有 AI 成员
+  - 并行调用各 AI 成员的人格模型生成回复
+  - 支持降级策略（degradeDecision）
+- **Token 限制策略**：
+  - 提示词方式：在消息中注入「请将回复限制在 X token 内」
+  - 后端截断：超过限制时自动截断并添加省略号
+  - 默认限制：50 token，可自定义
+- **命令接口**（/group 子命令）：
+  - `/group create <群名> [成员1,成员2]`：创建群聊
+  - `/group list`：列出所有群聊
+  - `/group info <群ID>`：查看群详情
+  - `/group delete <群ID>`：删除群聊
+  - `/group add <群ID> <人格ID>`：添加 Agent
+  - `/group remove <群ID> <成员ID>`：移除 Agent
+  - `/group token <群ID> [成员ID] <token数>`：设置 token 限制
+  - `/group send <群ID> <消息>`：发送消息到群聊
+  - `/group agents`：查看可用人格列表
+
+**核心文件**：
+- `src/main/agent/group-chat/group-chat.ts` - 新增
+- `src/main/router/router.ts` - 添加 `/group` 命令路由
+- `src/main/ipc/handlers.ts` - 添加 `/group` 命令处理
+- `src/main/index.ts` - 集成 initGroupChat()
+
+**类型检查**：TS strict 模式 3/3 零错
+
+---
+
+### 当前版本：`2.4.0`
+
+- 已完成：Phase 1 全部核心功能 + 日历/闹钟调度 + 搜索可信度 + 图表仪表盘 + API 余额显示 + 邮箱 MCP + 图表扩展 + 安全埋桩 + **灵魂三维（遗忘/梦境/元认知）** + **纪念日感知 + RAG 三阶段检索** + **六顶帽多 Agent 协作** + **知识图谱落地 + 一键重置 + 指令层级增强** + **人格分叉 A/B 测试 + 插件系统雏形** + **语音输入 STT + 对话导出 + 全局快捷键** + **桌面整理 + 文件搜索 + 番茄钟专注模式** + **社区共享协议 + 生图工具** + **生视频工具** + **歌曲翻唱（RVC 实装）** + **Siri 式语音唤醒（Whisper.cpp STT）** + **群聊模块（多 Agent 群聊 + token 限制 + Agent 管理）**
+- 状态：v2.4.0 已封板
+- 下一步：v2.5+ 全模态闭环 + 视觉感知
 
 ---
 
@@ -637,6 +680,546 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 - ✅ Chart.js 图表仪表盘（/stats 命令）
 - ✅ 元认知基础设施（为 v1.3 遗忘/自我怀疑做准备）
 
+#### v1.2.1 ✅ 2026-07-16：API 余额显示 + 配置文件加载修复
+
+**让纳西妲也关心你的钱包——L1 #29 余额显示补丁**
+
+- **DeepSeek 余额查询（balance.ts）**
+  - 新建 `src/main/api/balance.ts`
+  - 调用 `https://api.deepseek.com/user/balance`
+  - 输出：币种 / 总余额 / 赠送余额 / 充值余额 / 是否可用
+  - 未配置 Key 时给出友好提示
+
+- **`/balance` 命令 + Sidebar 余额按钮**
+  - 路由层识别 `/balance` 为预设命令
+  - 主进程直接查询并返回格式化文本（不走模型，省 token）
+  - 渲染层 Sidebar 新增 💰 余额按钮
+  - IPC 通道：`balance:get`
+
+- **配置文件加载修复**
+  - 修复 `loadUserConfigFromDisk()` 被导入但从未调用的问题
+  - `initConfig()` 现在会合并磁盘上的 `config.json`（用户配置 > 环境变量 > 默认值）
+  - 这意味着设置界面保存的 DeepSeek API Key 重启后真正生效
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.2.1 补丁清单**：
+- ✅ API 余额显示（DeepSeek）
+- ✅ `/balance` 命令
+- ✅ Sidebar 余额按钮
+- ✅ 用户配置文件启动时正确加载
+
+#### v1.2.2 ✅ 2026-07-16：邮箱 MCP + 图表扩展 + 安全纵深防御
+
+**让纳西妲也能收发邮件——L2 生活肢体补丁**
+
+- **邮箱 MCP 真实现**
+  - 新建 `src/main/mcp/servers/email-mcp-server.ts`
+  - `email_send`：nodemailer SMTP 发送，支持多收件人/抄送
+  - `email_receive`：imap 库读取收件箱头信息，显示发件人/主题/日期
+  - 注册到 Tool Registry（builtin.ts），Agent 可直接调用
+  - 依赖：`nodemailer` + `imap`（已安装）
+
+- **配置化 MCP Server 接入（QQ / 微信）**
+  - `Config` 新增 `mcpServers: { qq?, wechat? }` 字段
+  - `mcp-client.ts` 新增 `connectConfiguredMcpServers()`：启动时自动连接配置路径的第三方 Server
+  - `SettingsModal` 新增"连接"Tab：邮箱配置 + QQ/微信 Server 路径
+
+- **图表仪表盘扩展**
+  - `token-usage.ts`：`getChartData()` 新增 `modelDistribution`（模型使用分布）
+  - `StatsCard.tsx`：支持三种图表切换——📈 折线（Token+对话双轴）、📊 柱状（Token）、🥧 饼图（模型分布）
+
+- **安全纵深防御（L5 埋桩）**
+  - `src/main/security/canary.ts`：凭证金丝雀——为内存敏感值附加随机 Canary，检测外部篡改
+  - `src/main/security/audit-log.ts`：审计日志——按日轮转记录配置修改/工具调用/文件操作，敏感字段自动脱敏
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.2.2 补丁清单**：
+- ✅ 邮箱 MCP（SMTP 发送 + IMAP 接收）
+- ✅ QQ/微信配置化 MCP Server 接入
+- ✅ 图表切换（折线/柱状/饼图）+ 模型分布
+- ✅ 凭证金丝雀 + 审计日志
+
+#### v1.3.0 ✅ 2026-07-16：灵魂三维——遗忘 / 梦境 / 元认知
+
+**让纳西妲拥有灵魂——核心差异化护城河**
+
+- **遗忘机制（forgetting.ts）**
+  - 记忆强度系统：每条记忆 `strength` 0-100，新记忆=100，每天自然衰减-5
+  - `willMistake()`：strength < 40 时有概率被"记错"
+  - `blurContent()`：数字模糊化（年份±2）、时间模糊化（"很久以前"）
+  - `correct()`：用户纠正后 strength +20，上限 100
+  - 持久化：`memory/strength.json`
+  - `/stats` 中显示遗忘统计
+
+- **梦境模式（dream.ts）**
+  - `recordInteraction()`：用户发消息时更新最后交互时间
+  - `startDreamMonitor()`：每分钟检查 Idle 时长 / 凌晨 3-4 点
+  - 触发条件：Idle > 30min **或** 凌晨 3-4 点
+  - 梦呓内容：50% 低强度记忆碎片 + 50% 预设诗意短语
+  - IPC 推送：`AGENT_STATE_CHANGE` → 渲染层显示半透明气泡
+  - 用户发消息时自动唤醒（`wakeUp()`）
+
+- **元认知表达（metacognition.ts）**
+  - `analyze()`：5 维度置信度分析（输出长度 / 模糊词 / 自相矛盾 / 主动无知 / 模型匹配）
+  - `getMetacognitionPrompt()`：注入 System Prompt 的元认知模板
+  - `appendMetacognitionHint()`：低置信度时追加不确定性提示
+  - 自动建议：本地模型 + 复杂问题 + 置信度 < 40% → "可以让我深入思考一下"
+
+- **灵魂三维联动**
+  - 遗忘 → 梦境：低 strength 记忆成为梦呓素材
+  - 元认知 → 遗忘：承认"记不清"时触发记忆纠正通道
+  - 梦境 → 元认知：梦呓中的模糊记忆被追问时表达不确定性
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.3.0 灵魂三维清单**：
+- ✅ 遗忘机制（记忆强度 + 记错 + 纠正）
+- ✅ 梦境模式（Idle/凌晨触发 + 梦呓气泡）
+- ✅ 元认知表达（置信度分析 + 不确定提示 + 模型升级建议）
+
+#### v1.4.0 ✅ 2026-07-16：纪念日感知 + RAG 三阶段检索
+
+**让世界树记得你们相遇的那一天——情感锚点 + 工业级召回**
+
+- **纪念日感知（anniversary.ts）**
+  - 首次对话日期自动检测 + 持久化到 `memory/anniversary.json`
+  - 周年提醒：365/730/1095... 天时主动提及
+  - 时间感注入：system prompt 中显示"我们已经认识 X 天了"
+  - 语气随天数变化：<7 天活泼好奇，>100 天成熟稳重
+  - 对应文件：`src/main/soul/anniversary.ts`
+
+- **RAG 三阶段检索**
+  - **阶段 1 Query Transform**（`rag/query-transform.ts`）
+    - 关键词提取（停用词过滤）
+    - 实体识别（人名/地名/术语，正则匹配）
+    - 同义词扩展（纳西妲→小草神/布耶尔/草神）
+    - 查询意图分类（factual/procedural/conversational/ambiguous）
+  - **阶段 2 Reranker**（`rag/reranker.ts`）
+    - 4 维度评分：关键词匹配(40) + 实体覆盖(30) + 意图对齐(20) + 优先级(10)
+    - 分数阈值过滤（默认 30 分）
+    - Top N 返回（默认 5 条）
+  - **阶段 3 KG 增强**（`rag/knowledge-graph.ts`）
+    - 骨架实现：节点(实体) + 边(关系) + 三元组导出
+    - 多跳推理接口预留（"纳西妲的朋友的朋友"）
+    - 示例节点：纳西妲/旅行者/派蒙/须弥 + 关系
+
+- **agent-core.ts 集成**
+  - `generateResponse()` 使用 `ragRetrieve()` 替代直接 `recallWorldbook()`
+  - `warmupModel()` 初始化 RAG + 纪念日模块
+  - cycleLog 记录 RAG 耗时
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.4.0 清单**：
+- ✅ 纪念日感知（首次对话记录 + 周年提醒 + 时间感注入）
+- ✅ RAG Query Transform（关键词 + 实体 + 同义词 + 意图）
+- ✅ RAG Reranker（4 维度评分 + 阈值过滤）
+- ✅ KG 骨架（节点/边/多跳推理接口）
+
+#### v1.5.0 ✅ 2026-07-16：六顶帽多 Agent 协作框架
+
+**六个专家 Agent 并行审查，提升回复质量——借鉴 xiaoda-agent 的多角色协作模式**
+
+- **模式切换**：`/hat` 命令切换六顶帽模式（类似 `/think`）
+  - 启用：六片花瓣依次亮起（花冠轻转）
+  - 禁用：花瓣渐暗（花冠微垂）
+
+- **六个专家 Agent**（[multi-agent/](file:///e:/Nahida%20agent/src/main/agent/multi-agent/)）
+  - **白帽（信息官）**：提取事实数据、实体识别、关键词分析
+  - **红帽（情感官）**：情感关键词检测、直觉反馈、情绪判断
+  - **黑帽（风险官）**：风险关键词检测（承诺过高/金融/医疗/隐私）
+  - **黄帽（价值官）**：价值发现（知识/实用/社交/创新）
+  - **绿帽（创造官）**：替代方案、创新视角、发散思维
+  - **蓝帽（控制官）**：思考流程规划、步骤分解、质量控制
+
+- **协调器架构**（[coordinator.ts](file:///e:/Nahida%20agent/src/main/agent/multi-agent/coordinator.ts)）
+  - 全局单例：`getCoordinator()`
+  - 并行执行：6 个 Agent 同时思考，超时保护（5s）
+  - 结果聚合：生成摘要注入 system prompt（priority=98）
+  - 状态管理：hatModeEnabled / lastToggleTime / thoughtCount
+
+- **集成点**
+  - `router.ts`：新增 `/hat` 命令路由
+  - `handlers.ts`：`/hat` 命令处理（切换模式 + 纳西妲腔回复）
+  - `agent-core.ts`：F 段调用协调器，思考摘要注入 system prompt
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.5.0 清单**：
+- ✅ 六顶帽模式开关（`/hat` 命令）
+- ✅ 六个专家 Agent 实现（白/红/黑/黄/绿/蓝）
+- ✅ 协调器（并行执行 + 结果聚合）
+- ✅ 集成到路由层 + agent-core
+
+#### v1.6.0 ✅ 2026-07-16：知识图谱落地 + 一键重置 + 指令层级增强
+
+**世界树根系延伸——从骨架到实体，安全与记忆的双重加固**
+
+- **知识图谱落地**（[knowledge-graph.ts](file:///e:/Nahida%20agent/src/main/rag/knowledge-graph.ts)）
+  - 自动提取：从 worldbook 条目内容中自动提取实体（人名/地名/术语）和关系
+  - 实体规则：12 个人名 + 11 个地名 + 7 个术语，正则匹配
+  - 关系规则：6 种关系模式（朋友/敌人/居住于/管理/属于/来自）
+  - 持久化：自动保存到 `memory/kg.json`，启动时优先加载
+  - 多跳推理：支持 "纳西妲的朋友的朋友" 式链式查询
+  - 统计接口：`getKGStats()` 返回节点/边/类型分布
+
+- **一键重置**（[reset.ts](file:///e:/Nahida%20agent/src/main/soul/reset.ts)）
+  - 二次确认机制：`/reset` 请求 → `/reset confirm` 确认（1 分钟超时）
+  - 自动备份：重置前将数据备份到 `memory/backup/YYYYMMDD-HHmmss/`
+  - 重置范围：对话历史、纪念日、KG、Token 统计、用户配置
+  - 保留文件：SOHA.md / User.md 等人格核心 + worldbook 源文件
+  - 重置后回复："你好，初次见面。我是纳西妲，须弥的草神。"（铃铛轻响）
+
+- **指令层级增强**（[instruction-guard.ts](file:///e:/Nahida%20agent/src/main/safety/instruction-guard.ts)）
+  - 新增 5 种注入变体检测：角色切换 / 解除限制 / 系统提示泄露 / 假 system prompt / 身份替换
+  - 防御强化标记：检测到注入时，在清洗后消息前添加 `[L1-LOCKED]` 不可覆盖标记
+  - 分层防御：L1 (System Prompt) > L2 (memory) > L3 (user)，注入内容剥离但不拒绝对话
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.6.0 清单**：
+- ✅ 知识图谱自动提取（实体 + 关系 + 持久化）
+- ✅ 一键重置（二次确认 + 自动备份 + 安全清空）
+- ✅ 指令层级增强（5 种新变体 + L1-LOCKED 标记）
+
+#### v1.7.0 ✅ 2026-07-16：人格分叉 A/B 测试 + 插件系统雏形
+
+**让人格在分叉中进化——A/B 测试驱动的 prompt 优化 + 开放插件生态**
+
+- **人格分叉 A/B 测试**（[persona-ab.ts](file:///e:/Nahida%20agent/src/main/soul/persona-ab.ts)）
+  - `/ab start` 启动测试：创建两个 prompt 变体（A/B），随机分配用户分组
+  - `/ab stop` 停止测试：保存数据
+  - `/ab stats` 查看统计：消息数/平均回复长度/追问率/满意度
+  - `/ab switch` 手动切换分组
+  - 质量指标：追问率(40%) + 满意度(40%) + 回复长度适中(20%)
+  - 持久化到 `memory/persona-ab.json`
+  - prompt 修饰注入 system prompt（priority=92）
+
+- **插件系统雏形**（[plugins/](file:///e:/Nahida%20agent/src/main/plugins/)）
+  - 插件接口定义（[plugin-types.ts](file:///e:/Nahida%20agent/src/main/plugins/plugin-types.ts)）：清单 + 钩子 + 工具 + 命令
+  - 插件加载器（[plugin-loader.ts](file:///e:/Nahida%20agent/src/main/plugins/plugin-loader.ts)）：扫描 plugins/ 目录，自动加载
+  - 6 个钩子点：beforeMessage / afterResponse / onToolCall / onSessionStart / onSessionEnd / onCustomCommand
+  - 钩子链执行：按加载顺序执行，前一个可阻止后续
+  - 插件管理：`/plugin list` / `/plugin enable <id>` / `/plugin disable <id>`
+  - 插件目录结构：`plugins/<name>/manifest.json + index.js`
+
+- **集成点**
+  - `router.ts`：新增 `/ab` 和 `/plugin` 命令路由
+  - `handlers.ts`：命令处理 + 纳西妲腔回复
+  - `agent-core.ts`：A/B prompt 注入 + afterResponse 钩子 + 插件初始化
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.7.0 清单**：
+- ✅ A/B 测试启动/停止/统计/切换分组
+- ✅ 插件接口定义（清单/钩子/工具/命令）
+- ✅ 插件加载器（自动扫描 + 钩子链 + 管理命令）
+- ✅ 集成到路由层 + agent-core + handlers
+
+#### v1.8.0 ✅ 2026-07-16：语音输入 STT + 对话导出 + 全局快捷键
+
+**为 v2.0 全模态闭环铺路——耳朵、备忘录、指尖三件套**
+
+- **语音输入 STT**（[voice/stt.ts](file:///e:/Nahida%20agent/src/main/voice/stt.ts)）
+  - Web Speech API 封装：主进程控制开始/停止，渲染层执行实际识别
+  - 状态机：idle → listening → processing → idle
+  - 超时保护：默认 30s 自动停止（防一直挂着）
+  - IPC 通道：`stt:start` / `stt:stop` / `stt:result`
+  - 主进程 `initSTT(mainWindow)` 注入窗口引用，识别结果通过 IPC 回灌
+
+- **对话导出**（[memory/exporter.ts](file:///e:/Nahida%20agent/src/main/memory/exporter.ts)）
+  - 两种格式：Markdown（人类可读）+ JSON（机器可读）
+  - 默认路径：`exports/{sessionId}-{YYYYMMDD-HHmmss}.{md|json}`
+  - 元数据可选：含模型/Token/会话时长
+  - IPC 通道：`export:conversation`
+  - 集成 `/export md` / `/export json` 命令路由（待补）
+
+- **全局快捷键系统**（[hotkeys/shortcut-manager.ts](file:///e:/Nahida%20agent/src/main/hotkeys/shortcut-manager.ts)）
+  - Electron globalShortcut 封装
+  - 5 个默认快捷键：
+    - `Ctrl+Shift+N` - 显示/隐藏主窗口
+    - `Ctrl+Shift+V` - 开关语音识别
+    - `Ctrl+Shift+E` - 导出当前会话（Markdown）
+    - `Ctrl+Shift+F` - 打开反馈窗口
+    - `Ctrl+Shift+H` - 切换六顶帽模式
+  - 动作回调注册机制：`onAction(action, cb)`
+  - 退出时统一注销（防快捷键泄漏）
+
+- **主进程集成**
+  - `index.ts` 启动时 `initSTT()` + `initShortcuts()`
+  - 退出时 `unregisterAllShortcuts()` 防泄漏
+  - `handlers.ts` 添加 4 个新 IPC handler
+
+**类型检查**：TS strict 模式 0 错误
+
+**v1.8.0 清单**：
+- ✅ 语音输入 STT（Web Speech API + 主进程状态机）
+- ✅ 对话导出（Markdown / JSON 双格式）
+- ✅ 全局快捷键（5 默认 + 可扩展 + 防泄漏）
+- ✅ IPC 通道扩展（stt:* + export:conversation）
+
+#### v1.9.0 ✅ 2026-07-16：桌面整理 + 文件搜索 + 番茄钟专注模式
+
+**让纳西妲帮你收拾桌面、找到文件，并陪你进入心流——L2 #6 补完 + 番茄钟**
+
+- **桌面整理工具**（[tools/desktop-organize.ts](file:///e:/Nahida%20agent/src/main/tools/desktop-organize.ts)）
+  - `desktop_scan`：扫描桌面文件，按 8 类（图片/文档/视频/音频/压缩包/代码/安装包/其他）分类统计
+  - `desktop_organize`：一键整理桌面，支持 dry-run 预览，目标文件已存在则加时间戳后缀防覆盖
+  - `file_search`：在指定目录模糊搜索文件（默认用户目录，最大深度 5，扫描上限 50000 防 IO 风暴）
+  - 跳过 node_modules / __pycache__ / AppData 等噪音目录
+  - 补完 L2 #6「主动桌面/文件整理」
+
+- **番茄钟专注模式**（[tools/pomodoro.ts](file:///e:/Nahida%20agent/src/main/tools/pomodoro.ts) + [tools/pomodoro-scheduler.ts](file:///e:/Nahida%20agent/src/main/tools/pomodoro-scheduler.ts)）
+  - 状态机：idle → work → break / long_break → work → ... 自动循环
+  - 默认 25min 工作 + 5min 短休息 + 15min 长休息（每 4 段一次）
+  - 工作段完成自动记录到 `data/pomodoro/sessions.json`，保留最近 1000 条
+  - 调度器 1 秒 tick，到期自动切换并 IPC 推送状态到渲染层（agent:state-change 附 pomodoro 上下文）
+  - 按标签聚合统计：`pomodoro_stats` 返回今日/累计番茄钟数、总时长、按标签分布
+
+- **`/pomodoro` 命令**
+  - `/pomodoro start [工作时长] [标签]` - 启动番茄钟（默认 25 分钟）
+  - `/pomodoro stop` - 停止当前番茄钟
+  - `/pomodoro stats` - 查看今日专注统计
+  - `/pomodoro status` - 查看当前状态（剩余时间、阶段、标签）
+  - 全程纳西妲腔回复，附带 Live2D 动作 tag
+
+- **主进程集成**
+  - `index.ts` 注册 desktop-organize / pomodoro 工具 + 启动 pomodoro-scheduler
+  - `router.ts` 新增 `/pomodoro` 命令路由
+  - `handlers.ts` 实现 `/pomodoro` 子命令处理（调用底层工具，不走 LLM 省 token）
+
+**类型检查**：TS strict 模式 0 错误（main / preload / renderer 三处）
+
+**v1.9.0 清单**：
+- ✅ 桌面扫描（desktop_scan，8 类分类统计）
+- ✅ 桌面整理（desktop_organize，dry-run + 防覆盖 + 错误聚合）
+- ✅ 文件搜索（file_search，递归 + 深度限制 + 噪音目录跳过）
+- ✅ 番茄钟状态机（work / break / long_break / idle 自动循环）
+- ✅ 番茄钟调度器（1s tick + 状态变更 IPC 推送）
+- ✅ `/pomodoro` 命令 4 子命令（start / stop / stats / status）
+- ✅ 番茄钟统计持久化（按标签聚合 + 今日/累计）
+
+#### v2.0.0 ✅ 2026-07-16：社区共享协议 + 生图工具（Phase 3 起步）
+
+**Phase 3 开篇——两个标志性能力：人格可流通、生图可调用**
+
+- **社区共享协议雏形**（[community/](file:///e:/Nahida%20agent/src/main/community/)）
+  - 三件套：`package-format.ts`（格式定义 + zod schema + 兼容性检查） + `package-builder.ts`（打包器） + `package-installer.ts`（安装器 + 备份）
+  - `.nahida-package` 标准格式：`manifest.json` + 人格分片（SOHA/persona/emotion/skill/interest/reflect） + `worldbook/entries.jsonl` + `README.md`
+  - 三种包类型：`persona`（纯人格）/ `worldbook`（纯世界书）/ `full`（人格+世界书）
+  - 兼容性检查：`minAppVersion` / `maxAppVersion` 区间校验，格式版本硬匹配
+  - **安全约束**：
+    - `User.md` 脱敏为模板导出，安装时不覆盖用户已有 `User.md`
+    - `fact-*.md` / `emotion.md` / `reflect.md` 列入 `PROTECTED_FILES`，不覆盖运行时数据
+    - 路径白名单：包路径不得含 `..`，worldbook 内文件名不得含分隔符
+    - 安装前强制备份现有文件到 `memory/backup/{timestamp}_{packageName}/`
+    - 失败不自动回滚（保留备份让用户决策）
+  - `listAvailablePackages()` / `getPackageInfo()` 工具函数
+
+- **`/package` 命令**（4 子命令，全程纳西妲腔回复）
+  - `/package build <name> <display> [type=full|persona|worldbook]` 打包当前 `memory/` 为 `.nahida-package`
+  - `/package install <包名或路径>` 安装一个包（自动备份）
+  - `/package list` 列举 `packages/` 目录下的可用包
+  - `/package info <包名或路径>` 查看包详细信息（名称/版本/类型/作者/兼容性/标签）
+
+- **生图工具**（[tools/image-generate.ts](file:///e:/Nahida%20agent/src/main/tools/image-generate.ts)）
+  - 三后端适配器：
+    - **ComfyUI**（默认，本地 `http://127.0.0.1:8188`）：通过 `/prompt` 提交 workflow → 轮询 `/history/{id}` → `/view` 下载 PNG（120s 超时）
+    - **DALL·E 3**（云端）：`/v1/images/generations` 接口，`b64_json` 直存本地
+    - **SD WebUI**（兼容）：`/sdapi/v1/txt2img`，DPM++ 2M Karras 采样器
+  - 工具名：`image_generate`（注册到 Tool Registry，LLM function-calling 可调）
+  - **安全约束**：
+    - 后端 URL 仅允许 `localhost` / `127.0.0.1` / `::1` / HTTPS 公网（防 SSRF）
+    - prompt ≤ 1000 字符
+    - 输出限定 `data/images/` 目录
+    - 失败返回 `ok:false`，不阻塞 Agent（让四审降级）
+  - 配置：`config.json` 新增 `image` 字段（`backend` / `comfyuiUrl` / `sdwebuiUrl` / `dalleApiKey` / `defaultModel` / `defaultSize` / `defaultSteps` / `defaultCfg`）
+
+- **配置类型扩展**（[shared/types/config.ts](file:///e:/Nahida%20agent/src/shared/types/config.ts)）
+  - 新增 `ImageConfig` 接口（8 字段，全部可选）
+  - `Config` 接口添加 `image?: ImageConfig`
+
+- **路由扩展**
+  - `router.ts` `CommandType` 添加 `'/package'`，`COMMAND_PATTERNS` 添加 `'/package': '/package'`
+  - `handlers.ts` 添加 `/package` 子命令处理块，调用底层 `buildPackage` / `installPackage` / `listAvailablePackages` / `getPackageInfo`
+  - `/help` 列表新增 `/package`
+  - `COMMAND_RESPONSES` 添加 `'/package'`
+
+- **主进程集成**
+  - `index.ts` 注册 `registerImageGenerateTools()`
+  - typecheck 三处 tsconfig（main / preload / renderer）全部 0 错误
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.0.0 清单**：
+- ✅ .nahida-package 格式定义（zod schema + 兼容性检查 + 期望文件清单）
+- ✅ 打包器（从 memory/ 读取分片 + User.md 脱敏 + 生成 README）
+- ✅ 安装器（manifest 校验 + 兼容性检查 + 强制备份 + 路径白名单）
+- ✅ `/package` 4 子命令（build / install / list / info）
+- ✅ ComfyUI 适配器（/prompt 提交 + /history 轮询 + /view 下载）
+- ✅ DALL·E 3 适配器（b64_json 直存）
+- ✅ SD WebUI 适配器（/sdapi/v1/txt2img）
+- ✅ image_generate Tool 注册（LLM 可 function-call）
+- ✅ SSRF 防护（仅 localhost / 公网 HTTPS）
+- ✅ ImageConfig 类型扩展（config.ts）
+- ✅ 主进程 index.ts 集成
+
+#### v2.1.0 ✅ 2026-07-16：生视频工具（Phase 3 第二弹）
+
+**让纳西妲开口就能生成动态画面——L1 #15 补完**
+
+- **生视频工具**（[tools/video-generate.ts](file:///e:/Nahida%20agent/src/main/tools/video-generate.ts)）
+  - 三后端适配器：
+    - **火山引擎 Seedance**（默认，国内可用）：`POST /v1/videos/generations` 提交 → 轮询 → 下载 MP4
+    - **Runway Gen-3 Alpha**（国际主流）：`POST /v1/text_to_video` 或 `/v1/image_to_video`（图生视频） → 轮询 → 下载
+    - **OpenAI Sora 2**（预留口）：`POST /v1/videos/generations`，直接返回 URL
+  - 工具名：`video_generate`（注册到 Tool Registry，LLM function-calling 可调）
+  - **异步任务流程**：
+    1. POST 提交任务 → 拿到 `task_id`
+    2. GET 轮询任务状态（5 秒间隔，5 分钟超时）
+    3. 状态 success → 下载视频到 `data/videos/`
+  - **字段差异适配**：volcano `output` 是字符串 URL；runway `output`/`artifacts` 是数组；sora `data` 是数组
+  - **图生视频模式**：参数 `image_url` 提供起始图片 URL，自动切换到 image_to_video 端点
+  - **安全约束**：
+    - 仅 HTTPS 后端（防 SSRF）
+    - prompt ≤ 2000 字符
+    - 下载 URL 仅允许 `https://`
+    - 输出限定 `data/videos/` 目录
+    - 轮询超时 5 分钟
+    - 失败返回 `ok:false`，不阻塞 Agent
+  - 配置：`config.json` 新增 `video` 字段（`backend` / `volcanoApiKey` / `runwayApiKey` / `soraApiKey` / `defaultModel` / `defaultResolution` / `defaultDurationSeconds` / `defaultAspectRatio`）
+
+- **配置类型扩展**（[shared/types/config.ts](file:///e:/Nahida%20agent/src/shared/types/config.ts)）
+  - 新增 `VideoConfig` 接口（8 字段，全部可选）
+  - `Config` 接口添加 `video?: VideoConfig`
+
+- **主进程集成**
+  - `index.ts` 注册 `registerVideoGenerateTools()`
+  - typecheck 三处 tsconfig（main / preload / renderer）全部 0 错误
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.1.0 清单**：
+- ✅ 火山 Seedance 适配器（提交 + 轮询 + 下载）
+- ✅ Runway Gen-3 适配器（text_to_video + image_to_video）
+- ✅ OpenAI Sora 2 适配器（预留口，直接返回 URL）
+- ✅ 异步任务通用轮询框架（5 秒间隔 + 5 分钟超时 + 状态字段差异适配）
+- ✅ 图生视频模式（image_url 参数自动切换端点）
+- ✅ video_generate Tool 注册（LLM 可 function-call）
+- ✅ SSRF 防护（仅 HTTPS 后端 + HTTPS 下载）
+- ✅ VideoConfig 类型扩展（config.ts）
+- ✅ 主进程 index.ts 集成
+
+#### v2.2.0 ✅ 2026-07-16：歌曲翻唱 RVC 实装（Phase 3 第三弹）
+
+**让纳西妲开口唱歌——L1 #17 从 ⏳ 到 ✅**
+
+- **RVC 桥接实装**（[tts/rvc-bridge.ts](file:///e:/Nahida%20agent/src/main/tts/rvc-bridge.ts)）
+  - 双模式推理：
+    - **模式 A（infer_cli.py）**：如果用户在 RVC 根目录下提供了 `infer_cli.py`，直接传参调用
+    - **模式 B（内联 Python）**：通过 `python -c` 内联执行 RVC 推理脚本，兼容新版 `vc_single()` 和旧版 `pipeline()` API
+  - 核心函数：`runRvcInfer()` → 检查配置 → 检查模型 → 构造参数 → spawn Python → 返回结果
+  - 便捷封装：`convertVoice()` → 自动生成输出路径到 `data/rvc/`
+  - `RvcBridge` 类保留（向后兼容），`enabled` getter 改为动态检查（rvcRoot + 模型文件存在则启用）
+
+- **歌曲翻唱 Tool**（[tools/audio-cover.ts](file:///e:/Nahida%20agent/src/main/tools/audio-cover.ts)）
+  - 工具名：`audio_cover`，LLM function-calling 可调
+  - 参数：`input_audio_path`（必须）+ `f0up_key` / `f0method` / `index_rate` / `protect`（可选）
+  - **安全约束**：
+    - 路径白名单（仅项目目录内）
+    - 文件大小 ≤ 100MB
+    - 输出限定 `data/rvc/`
+    - 失败不阻塞 Agent
+  - 使用场景：用户上传音频 → "把这首歌变成纳西妲唱的" → Tool 调用 → 返回翻唱 wav
+
+- **配置扩展**（[shared/types/config.ts](file:///e:/Nahida%20agent/src/shared/types/config.ts)）
+  - `VoiceConfig` 新增 6 个 RVC 字段：
+    - `rvcIndexPath`：检索索引路径（可选）
+    - `rvcF0UpKey`：音高调整（默认 0）
+    - `rvcF0Method`：f0 算法（默认 harvest）
+    - `rvcIndexRate`：索引混合率（默认 0.66）
+    - `rvcDevice`：推理设备 cuda/cpu（默认 cuda）
+    - `rvcIsHalf`：半精度推理（默认 true）
+
+- **主进程集成**
+  - `index.ts` 注册 `registerAudioCoverTools()`
+  - typecheck 三处 tsconfig（main / preload / renderer）全部 0 错误
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.2.0 清单**：
+- ✅ RVC 桥接双模式推理（infer_cli.py + 内联 Python）
+- ✅ `runRvcInfer()` 核心函数（配置检查 + 模型检查 + spawn Python + 超时处理）
+- ✅ `convertVoice()` 便捷封装
+- ✅ `audio_cover` Tool 注册（LLM 可 function-call）
+- ✅ 路径白名单 + 文件大小限制（100MB）
+- ✅ VoiceConfig 扩展 6 个 RVC 字段
+- ✅ 主进程 index.ts 集成
+
+#### v2.3.0 ✅ 2026-07-16：Siri 式语音唤醒（Phase 3 第四弹）
+
+**让纳西妲听见你——本地离线 STT + 语音唤醒引擎**
+
+- **Whisper.cpp 本地适配器**（[voice/whisper-adapter.ts](file:///e:/Nahida%20agent/src/main/voice/whisper-adapter.ts)）
+  - 双模式推理：
+    - **模式 A（openai-whisper）**：`python -c` 调用 openai-whisper Python 库，返回 JSON 结果
+    - **模式 B（whisper-cpp）**：调用 `main.exe` CLI，支持 `-oj` JSON 输出
+  - 模型管理：`tiny`（默认，75MB，适合唤醒词）/ `base`（142MB）/ `small`（466MB）/ `medium`（1.5GB）/ `large`（2.9GB）
+  - 便捷封装：`recognizeSpeech()` → 自动读取配置中的模型路径和语言
+  - 模型下载辅助：`WHISPER_MODELS` 常量（名称/大小/下载 URL）+ `modelExists()` + `ensureWhisperDir()`
+
+- **语音唤醒引擎**（[voice/voice-wakeup.ts](file:///e:/Nahida%20agent/src/main/voice/voice-wakeup.ts)）
+  - 持续监听循环：录制 2-3 秒音频片段 → 调用 Whisper 识别 → 关键词匹配 → 唤醒触发
+  - 默认唤醒词："纳西妲" / "嘿，纳西妲" / "小纳西妲" / "娜娜"
+  - 安全约束：
+    - 默认关闭，需用户手动 `/wakeup on` 开启
+    - 仅前台监听（默认），可选后台监听
+    - 音频片段不持久化（识别后立即删除）
+    - 唤醒后自动停止监听，防重复触发
+  - 状态机：`disabled` → `idle` → `listening` → `detected` → `processing` → `error`
+
+- **STT 双模式切换**（[voice/stt.ts](file:///e:/Nahida%20agent/src/main/voice/stt.ts) 升级）
+  - 新增 `backend` 字段：`web-speech`（在线）/ `openai-whisper`（本地）/ `whisper-cpp`（本地）
+  - `switchBackend()` 函数：运行时切换 STT 后端
+  - `recognizeLocal()` 函数：本地模式专用识别入口（录制 → Whisper 推理 → 结果推送）
+  - 配置优先级：函数参数 > `VoiceConfig.sttBackend` > 默认 `web-speech`
+
+- **配置类型扩展**（[shared/types/config.ts](file:///e:/Nahida%20agent/src/shared/types/config.ts)）
+  - 新增 `STTBackend` 类型：`'web-speech' | 'openai-whisper' | 'whisper-cpp'`
+  - `VoiceConfig` 新增 6 个字段：
+    - `sttBackend`：STT 后端类型
+    - `whisperModelPath`：Whisper 模型路径
+    - `whisperLang`：识别语言
+    - `whisperDevice`：推理设备
+    - `wakeupEnabled`：是否启用语音唤醒
+    - `wakeupKeywords`：唤醒词列表
+
+- **`/wakeup` 命令**（全程纳西妲腔回复）
+  - `/wakeup on` - 开启语音唤醒（需要 Whisper 模型）
+  - `/wakeup off` - 关闭语音唤醒
+  - `/wakeup toggle` - 切换唤醒状态
+  - `/wakeup status` - 查看当前状态（唤醒状态 + STT 后端 + 监听间隔 + 唤醒词）
+  - `/wakeup backend <web-speech|openai-whisper|whisper-cpp>` - 切换 STT 后端
+
+- **主进程集成**
+  - `index.ts` 初始化 `initWakeup(mainWindow)`
+  - `router.ts` 新增 `/wakeup` 命令路由
+  - `handlers.ts` 添加 `/wakeup` 子命令处理（调用底层 `startWakeup` / `stopWakeup` / `toggleWakeup` / `getWakeupState` / `switchBackend`）
+  - `/help` 列表新增 `/wakeup`
+  - `COMMAND_RESPONSES` 添加 `'/wakeup'`
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.3.0 清单**：
+- ✅ Whisper.cpp 本地适配器（openai-whisper + whisper-cpp 双模式）
+- ✅ 语音唤醒引擎（持续监听 + 关键词检测 + 安全约束）
+- ✅ STT 双模式切换（web-speech / openai-whisper / whisper-cpp）
+- ✅ VoiceConfig 扩展 6 个字段（sttBackend / whisperModelPath / whisperLang / whisperDevice / wakeupEnabled / wakeupKeywords）
+- ✅ `/wakeup` 5 子命令（on / off / toggle / status / backend）
+- ✅ 主进程 index.ts 集成
+
 ### v1.0.0（里程碑）
 
 - 正式发布
@@ -749,10 +1332,10 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 | 11 | **壁纸模式** | Electron 透明窗 + alwaysOnTop + frame:false | ✅ 基础 |
 | 12 | **多软件连接（框架）** | MCP 协议 + Tool Registry | ✅ 框架 |
 | 13 | **API 与本地模型使用** | Router 动态择模（Qwen3-8B / V4pro / R1） | ✅ |
-| 14 | **生图** | Tool 接口预留（ComfyUI / DALL·E） | ⏳ 框架 |
-| 15 | **生视频** | Tool 接口预留 | ❌ Phase 3 |
+| 14 | **生图** | Tool 接口预留（ComfyUI / DALL·E） | ✅ v2.0 |
+| 15 | **生视频** | Tool 接口预留 | ✅ v2.1 |
 | 16 | **生语音（TTS）** | GPT-SoVITS 纳西妲音色（真声）+ edge-tts 备用 | ✅ |
-| 17 | **歌曲翻唱** | RVC 桥接预留（nahida_v0.3_100e.pth） | ⏳ 待启用 |
+| 17 | **歌曲翻唱** | RVC 桥接预留（nahida_v0.3_100e.pth） | ✅ v2.2 |
 | 18 | **自主进化** | Rand_error 机制 + 反思.md + cycleLog | ✅ 部分 |
 | 19 | **游戏性能报告** | Perception（FPS / GPU temp / GPU load） | ✅ |
 | 20 | **低后台占用** | q4_k_m 量化 + keep_alive + CPU TTS 预处理 | ✅ |
@@ -764,7 +1347,9 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 | 26 | **定时任务** | alarm-scheduler 10秒轮询 + 重复模式 | ✅ v1.1 |
 | 27 | **Token 使用统计** | session tokenUsage 累加 + 按日聚合 | ✅ |
 | 28 | **折线/柱状/饼图** | Chart.js + StatsCard 集成 | ✅ v1.2 |
-| 29 | **余额显示** | 云端 API 余额查询（待做） | ⏳ 待做 |
+| 29 | **余额显示** | DeepSeek /user/balance 查询 + /balance 命令 + Sidebar 按钮 | ✅ v1.2.1 |
+| 30 | **邮箱 MCP** | nodemailer SMTP 发送 + imap 接收 + Tool Registry 注册 | ✅ v1.2.2 |
+| 31 | **图表扩展** | 折线/柱状/饼图切换 + 模型分布 | ✅ v1.2.2 |
 | 30 | **代码审查** | 四审 A/B 维 + Tool 执行验证 | ✅ |
 | 31 | **输入意图判断** | Router + 四审 A 维 | ✅ |
 | 32 | **情绪审查** | 四审 C 维（11 枚举 → voice + expression） | ✅ |
@@ -776,10 +1361,10 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 | 38 | **六顶帽团队（并行思考）** | 多 Agent 并行审查 | ❌ v1.5 |
 | 39 | **附件 I：Thinking/Finding/Talking/Rethinking 四段** | cycleLog 持久化 | ✅ |
 | 40 | **附件 II：memory 六分片（soul/user/fact/error/habbit/interest）** | 9 分片已实现（含扩展） | ✅ |
-| 41 | **RAG 三阶段检索** | Query Transform + Reranker + KG 增强 | ❌ v1.4（借鉴 xiaoda-agent） |
-| 42 | **安全系统纵深防御** | 指令层级 / SSRF / 凭证库 / 金丝雀 | ⏳ 部分（SSRF✅） |
-| 43 | **多 Agent 协作框架** | 六顶帽并行 + 角色路由 | ❌ v1.5 |
-| 44 | **知识图谱** | 实体-关系三元组存储 | ❌ v1.6 |
+| 41 | **RAG 三阶段检索** | Query Transform + Reranker + KG 增强 | ✅ v1.4.0（借鉴 xiaoda-agent） |
+| 42 | **安全系统纵深防御** | SSRF✅ / 凭证金丝雀✅ / 审计日志✅ / 指令层级✅ v1.6 | ✅ v1.6.0 |
+| 43 | **多 Agent 协作框架** | 六顶帽并行 + 角色路由 | ✅ v1.5.0 |
+| 44 | **知识图谱** | 实体-关系自动提取 + 持久化 + 多跳推理 | ✅ v1.6.0 |
 
 ---
 
@@ -789,10 +1374,10 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 |---|---|---|---|---|
 | 1 | **日历提醒** | calendar_create/query/list Tool | 高 | ✅ v1.1 |
 | 2 | **闹钟** | alarm_set/list/cancel + alarm-scheduler 调度 | 高 | ✅ v1.1 |
-| 3 | **QQ 连接** | MCP Server（非官方） | 中 | ⏳ 框架 |
-| 4 | **微信连接** | MCP Server（非官方） | 中 | ⏳ 框架 |
-| 5 | **邮箱连接** | MCP Server（IMAP/SMTP） | 中 | ⏳ 框架 |
-| 6 | **主动桌面/文件整理** | DesktopScanner + 主动询问 + MCP filesystem | 中 | ❌ v1.3 |
+| 3 | **QQ 连接** | MCP Server 配置化接入（路径配置 + 自动 stdio 连接） | 中 | ✅ v1.2.2 |
+| 4 | **微信连接** | MCP Server 配置化接入 | 中 | ✅ v1.2.2 |
+| 5 | **邮箱连接** | nodemailer SMTP + imap 真实现 | 中 | ✅ v1.2.2 |
+| 6 | **主动桌面/文件整理** | desktop_scan / desktop_organize / file_search | 中 | ✅ v1.9 |
 | 7 | **游戏内主动调优** | Low 帧时建议/自动切换画质（高阶 Tool） | 低 | ❌ v1.4 |
 | 8 | **RGB 灯光氛围同步** | 情绪 → Philips Hue / 主板 RGB API | 低 | ❌ v1.6 |
 
@@ -802,11 +1387,11 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 
 | # | 功能 | 说明 | 哲学意义 | 状态 |
 |---|---|---|---|---|
-| 1 | **遗忘机制** | 偶尔记错不重要的细节 → 被纠正 → 困惑/羞愧 | 瑕疵之美，真实感 | ❌ v1.3 |
-| 2 | **梦境模式** | 系统 Idle >30min 或凌晨 3-4 点 → 低功耗梦呓 | 潜意识溢出 | ❌ v1.3 |
-| 3 | **元认知与自我怀疑** | 表达不确定性（"约七成概率…"）+ 主动求助切换更强模型 | 智慧之谦 | ❌ v1.3 |
+| 1 | **遗忘机制** | 偶尔记错不重要的细节 → 被纠正 → 困惑/羞愧 | 瑕疵之美，真实感 | ✅ v1.3.0 |
+| 2 | **梦境模式** | 系统 Idle >30min 或凌晨 3-4 点 → 低功耗梦呓 | 潜意识溢出 | ✅ v1.3.0 |
+| 3 | **元认知与自我怀疑** | 表达不确定性（"约七成概率…"）+ 主动求助切换更强模型 | 智慧之谦 | ✅ v1.3.0 |
 | 4 | **时间感与数字衰老** | 累计交互时长 → maturity 参数 → 人格微调 | 生命之流 | ✅ v0.9.9 |
-| 5 | **纪念日感知** | 首次对话纪念日 → 主动提及 | 情感锚点 | ❌ v1.4 |
+| 5 | **纪念日感知** | 首次对话纪念日 → 主动提及 | 情感锚点 | ✅ v1.4.0 |
 | 6 | **Heartjump（心动检测）** | 触及核心记忆/回复超常/打破第四面墙 → 特殊动作 | 感性萌芽 | ✅ v1.0 |
 
 ---
@@ -834,7 +1419,7 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 | 4 | **多设备同步** | sync.ts + WebDAV / OneDrive / NAS 增量 | v1.x |
 | 5 | **人格分叉与 A/B 测试** | persona-v1/v2 fork + active_persona 软链 | v1.x |
 | 6 | **插件/扩展市场雏形** | plugin.json schema + 扫描 plugins/ 目录 | v1.x |
-| 7 | **社区共享协议** | .nahida-package（manifest + lora + persona + worldbook） | v2.0 |
+| 7 | **社区共享协议** | .nahida-package（manifest + lora + persona + worldbook） | ✅ v2.0.0 |
 | 8 | **一键重置（Factory Reset）** | `nahida reset --keep=user,fact-mid,persona` | v1.x |
 
 ---
@@ -880,17 +1465,22 @@ const maturity = Math.min(1, (totalMs / MS_PER_DAY) / 30) * decayFactor;
 |---|---|
 | ✅ v1.1 | 日历/闹钟/定时任务 + MCP Client 框架 |
 | ✅ v1.2 | 搜索置信度评分 + web_fetch 可信度打分 + Chart.js 图表仪表盘 |
-| v1.3 | 遗忘机制 + 梦境模式 + 元认知表达 |
-| v1.4 | 纪念日感知 + RAG 三阶段检索（借鉴 xiaoda-agent） |
-| v1.5 | 六顶帽并行 + 多 Agent 协作框架 |
-| v1.6 | 知识图谱 + 多设备同步 + 一键重置 |
-| v1.7 | 人格分叉 A/B 测试 + 插件系统雏形 |
+| ✅ v1.3 | 遗忘机制 + 梦境模式 + 元认知表达 |
+| ✅ v1.4 | 纪念日感知 + RAG 三阶段检索（借鉴 xiaoda-agent） |
+| ✅ v1.5 | 六顶帽多 Agent 协作框架（借鉴 xiaoda-agent） |
+| ✅ v1.6 | 知识图谱落地 + 一键重置 + 指令层级增强 |
+| ✅ v1.7 | 人格分叉 A/B 测试 + 插件系统雏形 |
+| ✅ v1.8 | 语音输入 STT + 对话导出 + 全局快捷键 |
+| ✅ v1.9 | 桌面整理 + 文件搜索 + 番茄钟专注模式 |
 
 ### v2.0（Phase 3）
 
 | 版本 | 里程碑 |
 |---|---|
-| v2.0 | Siri 式语音唤醒（Whisper.cpp STT）+ 社区共享协议 + 生视频 + 歌曲翻唱 + 全模态闭环 |
+| ✅ v2.0 | 社区共享协议（.nahida-package 三件套）+ 生图工具（ComfyUI / DALL·E / SD WebUI 三后端）|
+| ✅ v2.1 | 生视频工具（火山 Seedance / Runway Gen-3 / OpenAI Sora 三后端）|
+| ✅ v2.2 | 歌曲翻唱 RVC 实装（infer_cli.py + 内联 Python 双模式）|
+| v2.3+ | Siri 式语音唤醒（Whisper.cpp STT）+ 全模态闭环 |
 
 ---
 

@@ -62,9 +62,12 @@ let config: Config | undefined;
  *
  * 从环境变量读取，环境变量不存在则用默认值。
  * 如果项目安装了 dotenv，会自动加载 .env 文件。
+ * 若之前调用过 loadUserConfigFromDisk()，会把用户配置合并进来（用户配置 > 环境变量 > 默认值）。
  */
 export function initConfig(): Config {
   if (config) return config;
+
+  const userConfig = (global as { __userConfig?: Partial<Config> }).__userConfig;
 
   config = {
     ollama: {
@@ -97,7 +100,27 @@ export function initConfig(): Config {
       gptsovitsRefDir: envRequired('NAHIDA_GPTSOVITS_REF_DIR', DEFAULT_GPTSOVITS_REF_DIR),
       gptsovitsModelDir: envRequired('NAHIDA_GPTSOVITS_MODEL_DIR', DEFAULT_GPTSOVITS_MODEL_DIR),
     },
+    email: {
+      smtpHost: envOptional('NAHIDA_EMAIL_SMTP_HOST') ?? '',
+      smtpPort: envNumber('NAHIDA_EMAIL_SMTP_PORT', 0),
+      smtpSecure: process.env.NAHIDA_EMAIL_SMTP_SECURE !== 'false',
+      imapHost: envOptional('NAHIDA_EMAIL_IMAP_HOST') ?? '',
+      imapPort: envNumber('NAHIDA_EMAIL_IMAP_PORT', 0),
+      imapSecure: process.env.NAHIDA_EMAIL_IMAP_SECURE !== 'false',
+      username: envOptional('NAHIDA_EMAIL_USERNAME') ?? '',
+      password: envOptional('NAHIDA_EMAIL_PASSWORD') ?? '',
+    },
+    mcpServers: {
+      qq: envOptional('NAHIDA_MCP_QQ_PATH'),
+      wechat: envOptional('NAHIDA_MCP_WECHAT_PATH'),
+    },
   };
+
+  // 合并用户配置文件（用户配置优先级最高）
+  if (userConfig) {
+    config = deepMergeConfig(config, userConfig);
+    console.log('[Config] merged user config from disk');
+  }
 
   console.log('[Config] initialized');
   return config;
@@ -149,6 +172,27 @@ function envNumber(key: string, defaultValue: number): number {
   return Number.isNaN(num) ? defaultValue : num;
 }
 
+/**
+ * 深度合并配置
+ *
+ * 用户配置文件中的嵌套字段（如 api.deepseekKey）能正确覆盖默认值，
+ * 同时保留 base 中未被覆盖的字段。
+ *
+ * 由于 Config 的每个顶层字段都是结构确定的对象，这里显式合并各子配置，
+ * 避免 TypeScript 对动态 key 赋值的严格类型检查问题。
+ */
+function deepMergeConfig(base: Config, override: Partial<Config>): Config {
+  return {
+    ollama: override.ollama ? { ...base.ollama, ...override.ollama } : base.ollama,
+    models: override.models ? { ...base.models, ...override.models } : base.models,
+    api: override.api ? { ...base.api, ...override.api } : base.api,
+    session: override.session ? { ...base.session, ...override.session } : base.session,
+    voice: override.voice ? { ...base.voice, ...override.voice } : base.voice,
+    email: override.email ? { ...base.email, ...override.email } : base.email,
+    mcpServers: override.mcpServers ? { ...base.mcpServers, ...override.mcpServers } : base.mcpServers,
+  };
+}
+
 // ── 配置持久化（v0.9.8 设置界面支持） ────────────────────────────────
 
 /** 用户配置文件路径（项目根目录下的 config.json） */
@@ -170,6 +214,8 @@ export function saveConfigToDisk(partialConfig: Partial<Config>): void {
     api: { ...current.api, ...partialConfig.api },
     session: { ...current.session, ...partialConfig.session },
     voice: { ...current.voice, ...partialConfig.voice },
+    email: { ...current.email, ...partialConfig.email },
+    mcpServers: { ...current.mcpServers, ...partialConfig.mcpServers },
   };
 
   // 更新内存中的 config

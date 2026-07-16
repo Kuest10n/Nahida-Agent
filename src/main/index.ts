@@ -3,9 +3,20 @@ import { WindowManager } from './windows/manager';
 import { setupIpcHandlers } from './ipc/handlers';
 import { warmupModel } from './agent/agent-core';
 import { registerBuiltinTools } from './tools/builtin';
+import { connectConfiguredMcpServers } from './mcp/mcp-client';
+import { startDreamMonitor } from './soul/dream';
+import { initSTT } from './voice/stt';
+import { initWakeup } from './voice/voice-wakeup';
+import { initShortcuts, unregisterAll as unregisterAllShortcuts } from './hotkeys/shortcut-manager';
 import { registerCalendarTools } from './tools/calendar';
 import { registerAlarmTools } from './tools/alarm';
 import { startAlarmScheduler } from './tools/alarm-scheduler';
+import { registerDesktopOrganizeTools } from './tools/desktop-organize';
+import { registerPomodoroTools } from './tools/pomodoro';
+import { startPomodoroScheduler } from './tools/pomodoro-scheduler';
+import { registerImageGenerateTools } from './tools/image-generate';
+import { registerVideoGenerateTools } from './tools/video-generate';
+import { registerAudioCoverTools } from './tools/audio-cover';
 import { PerceptionModule } from './perception';
 import { ReviewLayer } from './agent/review-layer';
 import { proactiveQueue } from './agent/proactive-queue';
@@ -13,6 +24,7 @@ import { createTray, destroyTray, updateTrayStatus } from './tray/tray-manager';
 import { registerShortcuts, unregisterShortcuts } from './tray/shortcuts';
 import { initPersonalityManager } from './memory/personality-manager';
 import { emergencyFlush, loadSessions } from './memory/session-store';
+import { initGroupChat } from './agent/group-chat/group-chat';
 import { healthMonitor, createHttpProbe, createNetworkProbe } from './health/health';
 import { getConfig, getOllamaBaseUrl, loadUserConfigFromDisk } from './config/config';
 import { initMaturity } from './agent/maturity';
@@ -113,6 +125,9 @@ function setupHealthMonitor(): void {
 }
 
 app.whenReady().then(() => {
+  // 启动时先加载用户配置文件（让设置界面保存的 API Key 等生效）
+  loadUserConfigFromDisk();
+
   // 启动时加载 session（顺便做紧急恢复）
   loadSessions();
 
@@ -166,7 +181,32 @@ app.whenReady().then(() => {
   registerAlarmTools();
   startAlarmScheduler(windowMgr.mainWindow);
 
+  // v1.9: 桌面整理 + 番茄钟
+  registerDesktopOrganizeTools();
+  registerPomodoroTools();
+  registerImageGenerateTools();
+  registerVideoGenerateTools();
+  registerAudioCoverTools();
+  startPomodoroScheduler(windowMgr.mainWindow);
+
+  // 启动配置化的第三方 MCP Server（QQ / 微信）
+  void connectConfiguredMcpServers();
+
+  // 启动梦境监控（灵魂三维）
+  startDreamMonitor(windowMgr.mainWindow);
+
+  // v1.8: 初始化语音输入 STT
+  initSTT(windowMgr.mainWindow);
+  // v2.3: 初始化语音唤醒引擎
+  initWakeup(windowMgr.mainWindow);
+
+  // v1.8: 初始化全局快捷键
+  if (windowMgr.mainWindow) {
+    initShortcuts(windowMgr.mainWindow);
+  }
+
   initPersonalityManager();
+  initGroupChat();
 
   initMaturity();
 
@@ -187,7 +227,7 @@ app.on('activate', () => {
 });
 
 // 退出前紧急写盘（正常退出也走一遍，双保险）
-app.on('before-quit', (event) => {
+app.on('before-quit', () => {
   console.warn('[App] before-quit — emergency flushing sessions');
   emergencyFlush();
 });
@@ -196,6 +236,7 @@ app.on('window-all-closed', () => {
   perception.stop();
   destroyTray();
   unregisterShortcuts();
+  unregisterAllShortcuts(); // v1.8: 注销全局快捷键
   // 退出前最后再刷一次
   emergencyFlush();
   // 清理所有 Python 子进程（防僵尸）

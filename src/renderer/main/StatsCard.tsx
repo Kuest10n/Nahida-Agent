@@ -6,15 +6,16 @@ import {
   PointElement,
   LineElement,
   BarElement,
+  ArcElement,
   Title,
   Tooltip,
   Legend,
   type ChartData,
 } from 'chart.js';
-import { Line } from 'react-chartjs-2';
+import { Line, Bar, Pie } from 'react-chartjs-2';
 import { IpcChannel } from '../../shared/types/ipc';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend);
 
 interface ChartResponse {
   ok: boolean;
@@ -22,17 +23,28 @@ interface ChartResponse {
     dates: string[];
     tokens: number[];
     conversations: number[];
+    modelDistribution: { labels: string[]; values: number[] };
   };
 }
+
+type ChartType = 'line' | 'bar' | 'pie';
+
+const CHART_COLORS = [
+  '#43a047', '#1e88e5', '#fb8c00', '#e53935', '#8e24aa',
+  '#00acc1', '#fdd835', '#6d4c41', '#546e7a', '#ec407a',
+];
 
 /**
  * Token 统计图表卡片
  *
  * - 渲染 markdown 摘要文本
- * - 通过 IPC 获取 chart 数据，绘制 7 日 token / 对话数折线图
+ * - 通过 IPC 获取 chart 数据，支持折线/柱状/饼图切换
  */
 export const StatsCard: React.FC<{ summary: string }> = ({ summary }) => {
-  const [chartData, setChartData] = useState<ChartData<'line'> | null>(null);
+  const [chartType, setChartType] = useState<ChartType>('line');
+  const [lineData, setLineData] = useState<ChartData<'line'> | null>(null);
+  const [barData, setBarData] = useState<ChartData<'bar'> | null>(null);
+  const [pieData, setPieData] = useState<ChartData<'pie'> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,8 +56,9 @@ export const StatsCard: React.FC<{ summary: string }> = ({ summary }) => {
           return;
         }
 
-        const { dates, tokens, conversations } = res.chartData;
-        setChartData({
+        const { dates, tokens, conversations, modelDistribution } = res.chartData;
+
+        setLineData({
           labels: dates,
           datasets: [
             {
@@ -68,6 +81,31 @@ export const StatsCard: React.FC<{ summary: string }> = ({ summary }) => {
             },
           ],
         });
+
+        setBarData({
+          labels: dates,
+          datasets: [
+            {
+              label: 'Token 使用量',
+              data: tokens,
+              backgroundColor: 'rgba(67, 160, 71, 0.6)',
+              borderColor: '#43a047',
+              borderWidth: 1,
+            },
+          ],
+        });
+
+        setPieData({
+          labels: modelDistribution.labels,
+          datasets: [
+            {
+              data: modelDistribution.values,
+              backgroundColor: modelDistribution.labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+              borderColor: '#fff',
+              borderWidth: 2,
+            },
+          ],
+        });
       } catch (err) {
         console.error('[StatsCard] load chart failed:', err);
         setError('图表加载失败');
@@ -76,6 +114,17 @@ export const StatsCard: React.FC<{ summary: string }> = ({ summary }) => {
 
     void loadChart();
   }, []);
+
+  const btnStyle = (active: boolean): React.CSSProperties => ({
+    padding: '4px 12px',
+    border: '1px solid #a5d6a7',
+    borderRadius: 4,
+    backgroundColor: active ? '#4caf50' : '#fff',
+    color: active ? '#fff' : '#2e7d32',
+    cursor: 'pointer',
+    fontSize: 12,
+    marginRight: 6,
+  });
 
   return (
     <div
@@ -108,10 +157,19 @@ export const StatsCard: React.FC<{ summary: string }> = ({ summary }) => {
           {summary}
         </pre>
 
-        {chartData && (
-          <div style={{ marginTop: 12, height: 220 }}>
+        {/* 图表切换按钮 */}
+        {(lineData || barData || pieData) && (
+          <div style={{ marginTop: 12, marginBottom: 8 }}>
+            <button style={btnStyle(chartType === 'line')} onClick={() => setChartType('line')}>📈 折线</button>
+            <button style={btnStyle(chartType === 'bar')} onClick={() => setChartType('bar')}>📊 柱状</button>
+            <button style={btnStyle(chartType === 'pie')} onClick={() => setChartType('pie')}>🥧 饼图</button>
+          </div>
+        )}
+
+        {chartType === 'line' && lineData && (
+          <div style={{ marginTop: 8, height: 220 }}>
             <Line
-              data={chartData}
+              data={lineData}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
@@ -141,7 +199,46 @@ export const StatsCard: React.FC<{ summary: string }> = ({ summary }) => {
           </div>
         )}
 
-        {error && !chartData && (
+        {chartType === 'bar' && barData && (
+          <div style={{ marginTop: 8, height: 220 }}>
+            <Bar
+              data={barData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: 'top' },
+                  title: { display: true, text: '近 30 日 Token 使用量' },
+                },
+                scales: {
+                  x: { grid: { display: false } },
+                  y: {
+                    display: true,
+                    title: { display: true, text: 'Token' },
+                  },
+                },
+              }}
+            />
+          </div>
+        )}
+
+        {chartType === 'pie' && pieData && (
+          <div style={{ marginTop: 8, height: 240 }}>
+            <Pie
+              data={pieData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: 'right' },
+                  title: { display: true, text: '模型使用分布' },
+                },
+              }}
+            />
+          </div>
+        )}
+
+        {error && !lineData && (
           <div style={{ marginTop: 8, color: '#c62828', fontSize: 12 }}>
             {error}
           </div>

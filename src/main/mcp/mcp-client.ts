@@ -14,6 +14,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { z } from 'zod';
 import { registerTools, type ToolDefinition, type ToolResult } from '../tools/registry';
+import { getConfig } from '../config/config';
 
 export interface McpServerConfig {
   name: string;
@@ -206,4 +207,38 @@ export function disconnectAllServers(): void {
 
 export function getConnectedServers(): string[] {
   return Array.from(runningServers.keys());
+}
+
+/**
+ * 从用户配置启动第三方 MCP Server（QQ / 微信）
+ *
+ * v1.2.x 补丁：读取 config.mcpServers.{qq,wechat} 路径，
+ * 若存在则自动通过 stdio 连接。
+ */
+export async function connectConfiguredMcpServers(): Promise<void> {
+  const cfg = getConfig().mcpServers;
+  if (!cfg) {
+    console.log('[MCP Client] No configured MCP servers');
+    return;
+  }
+
+  const servers: Array<{ name: string; path?: string }> = [
+    { name: 'qq', path: cfg.qq },
+    { name: 'wechat', path: cfg.wechat },
+  ];
+
+  for (const srv of servers) {
+    if (!srv.path) continue;
+
+    try {
+      await connectMcpServer({
+        name: srv.name,
+        command: srv.path,
+        args: [],
+      });
+      console.log(`[MCP Client] Auto-connected ${srv.name} from ${srv.path}`);
+    } catch (err) {
+      console.error(`[MCP Client] Failed to auto-connect ${srv.name}:`, err);
+    }
+  }
 }

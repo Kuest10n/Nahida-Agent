@@ -33,13 +33,14 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type TabKey = 'model' | 'perception' | 'personality';
+type TabKey = 'model' | 'perception' | 'personality' | 'connection';
 
 /** Tab 配置 */
 const TABS: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: 'model', label: '模型', icon: '🤖' },
   { key: 'perception', label: '感知', icon: '👁️' },
   { key: 'personality', label: '人格', icon: '🌱' },
+  { key: 'connection', label: '连接', icon: '🔌' },
 ];
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -83,6 +84,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setLocalConfig((prev: Partial<Config>) => ({
       ...prev,
       voice: { ...prev.voice!, [key]: value },
+    }));
+    setDirty(true);
+  };
+
+  const updateApi = (key: keyof Config['api'], value: string) => {
+    setLocalConfig((prev: Partial<Config>) => ({
+      ...prev,
+      api: { ...prev.api!, [key]: value },
+    }));
+    setDirty(true);
+  };
+
+  const updateEmail = (key: keyof Config['email'], value: string | number | boolean) => {
+    setLocalConfig((prev: Partial<Config>) => ({
+      ...prev,
+      email: { ...(prev.email ?? {}), [key]: value } as Config['email'],
+    }));
+    setDirty(true);
+  };
+
+  const updateMcpServers = (key: keyof Config['mcpServers'], value: string) => {
+    setLocalConfig((prev: Partial<Config>) => ({
+      ...prev,
+      mcpServers: { ...(prev.mcpServers ?? {}), [key]: value } as Config['mcpServers'],
     }));
     setDirty(true);
   };
@@ -182,6 +207,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               api={localConfig.api}
               onUpdateOllama={updateOllama}
               onUpdateModels={updateModels}
+              onUpdateApi={updateApi}
             />
           )}
           {activeTab === 'perception' && (
@@ -192,6 +218,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
           {activeTab === 'personality' && (
             <PersonalityTab />
+          )}
+          {activeTab === 'connection' && (
+            <ConnectionTab
+              email={localConfig.email}
+              mcpServers={localConfig.mcpServers}
+              onUpdateEmail={updateEmail}
+              onUpdateMcpServers={updateMcpServers}
+            />
           )}
         </div>
 
@@ -250,7 +284,8 @@ const ModelTab: React.FC<{
   api?: Config['api'];
   onUpdateOllama: (key: keyof Config['ollama'], value: string | number) => void;
   onUpdateModels: (key: keyof Config['models'], value: string) => void;
-}> = ({ ollama, models, api, onUpdateOllama, onUpdateModels }) => {
+  onUpdateApi: (key: keyof Config['api'], value: string) => void;
+}> = ({ ollama, models, api, onUpdateOllama, onUpdateModels, onUpdateApi }) => {
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '8px 12px',
@@ -341,10 +376,7 @@ const ModelTab: React.FC<{
           <input
             type="password"
             value={api?.deepseekKey ?? ''}
-            onChange={e => {
-              // 直接修改 localConfig.api
-              // 这里简化处理，实际应该走统一更新函数
-            }}
+            onChange={e => onUpdateApi('deepseekKey', e.target.value)}
             style={inputStyle}
             placeholder="sk-..."
           />
@@ -475,6 +507,137 @@ const PersonalityTab: React.FC = () => {
         人格切换功能已在左下角提供，<br />
         详细管理界面将在 v1.1 实现。
       </div>
+    </div>
+  );
+};
+
+/** 连接 Tab —— 邮箱 + 第三方 MCP Server */
+const ConnectionTab: React.FC<{
+  email?: Config['email'];
+  mcpServers?: Config['mcpServers'];
+  onUpdateEmail: (key: keyof Config['email'], value: string | number | boolean) => void;
+  onUpdateMcpServers: (key: keyof Config['mcpServers'], value: string) => void;
+}> = ({ email, mcpServers, onUpdateEmail, onUpdateMcpServers }) => {
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '8px 12px',
+    border: '1px solid #ddd',
+    borderRadius: 6,
+    fontSize: 13,
+    marginTop: 4,
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  };
+
+  return (
+    <div>
+      {/* 邮箱配置 */}
+      <section style={{ marginBottom: 24 }}>
+        <h3 style={{ fontSize: 14, color: '#2e7d32', marginBottom: 12 }}>📧 邮箱（SMTP / IMAP）</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>SMTP 服务器</label>
+            <input
+              type="text"
+              value={email?.smtpHost ?? ''}
+              onChange={e => onUpdateEmail('smtpHost', e.target.value)}
+              style={inputStyle}
+              placeholder="smtp.qq.com"
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>SMTP 端口</label>
+            <input
+              type="number"
+              value={email?.smtpPort ?? ''}
+              onChange={e => onUpdateEmail('smtpPort', parseInt(e.target.value, 10) || 0)}
+              style={inputStyle}
+              placeholder="465"
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>IMAP 服务器</label>
+            <input
+              type="text"
+              value={email?.imapHost ?? ''}
+              onChange={e => onUpdateEmail('imapHost', e.target.value)}
+              style={inputStyle}
+              placeholder="imap.qq.com"
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>IMAP 端口</label>
+            <input
+              type="number"
+              value={email?.imapPort ?? ''}
+              onChange={e => onUpdateEmail('imapPort', parseInt(e.target.value, 10) || 0)}
+              style={inputStyle}
+              placeholder="993"
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>邮箱账号</label>
+            <input
+              type="text"
+              value={email?.username ?? ''}
+              onChange={e => onUpdateEmail('username', e.target.value)}
+              style={inputStyle}
+              placeholder="example@qq.com"
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>邮箱密码 / 授权码</label>
+            <input
+              type="password"
+              value={email?.password ?? ''}
+              onChange={e => onUpdateEmail('password', e.target.value)}
+              style={inputStyle}
+              placeholder="授权码"
+            />
+          </div>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: '#999' }}>
+          提示：QQ/163 等邮箱通常需要"授权码"而非登录密码
+        </div>
+      </section>
+
+      {/* 第三方 MCP Server */}
+      <section>
+        <h3 style={{ fontSize: 14, color: '#2e7d32', marginBottom: 12 }}>🔌 第三方 MCP Server</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>QQ MCP Server 路径（可选）</label>
+            <input
+              type="text"
+              value={mcpServers?.qq ?? ''}
+              onChange={e => onUpdateMcpServers('qq', e.target.value)}
+              style={inputStyle}
+              placeholder="C:\\go-cqhttp\\mcp-server.exe"
+            />
+            <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+              指向第三方 QQ Bot 的 MCP Server 可执行文件
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>微信 MCP Server 路径（可选）</label>
+            <input
+              type="text"
+              value={mcpServers?.wechat ?? ''}
+              onChange={e => onUpdateMcpServers('wechat', e.target.value)}
+              style={inputStyle}
+              placeholder="C:\\wcferry\\mcp-server.exe"
+            />
+            <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+              指向第三方微信 Bot 的 MCP Server 可执行文件
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 };

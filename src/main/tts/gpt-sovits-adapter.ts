@@ -80,11 +80,6 @@ export class GptSoVitsAdapter implements TtsAdapter {
     return getConfig().voice.gptsovitsRefDir || '';
   }
 
-  /** 模型路径 */
-  private get modelDir(): string {
-    return getConfig().voice.gptsovitsModelDir || '';
-  }
-
   /**
    * 启动 GPT-SoVITS API 服务
    *
