@@ -21,6 +21,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as vm from 'node:vm';
 import type {
   NahidaPlugin,
   LoadedPlugin,
@@ -34,6 +35,50 @@ import type {
 
 /** 插件目录 */
 const PLUGINS_DIR = path.resolve(process.cwd(), 'plugins');
+
+/** 被 security 策略阻止的模块（VULN-002 修复） */
+const BLOCKED_MODULES = new Set([
+  'child_process',
+  'cluster',
+  'worker_threads',
+  'node:child_process',
+  'node:cluster',
+  'node:worker_threads',
+]);
+
+/**
+ * 沙箱化加载插件代码
+ *
+ * 使用 vm.runInThisContext 编译插件代码，注入受限的 require，
+ * 阻止 child_process / cluster / worker_threads 等危险模块。
+ * 注意：vm.runInThisContext 不是完美沙箱，但能阻止直接 require 危险模块。
+ */
+function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
+  const code = fs.readFileSync(indexPath, 'utf-8');
+  const dir = path.dirname(indexPath);
+
+  // CommonJS 包装：(function(exports, require, module, __filename, __dirname) { ... })
+  const wrapper = `(function(exports, require, module, __filename, __dirname) { ${code} })`;
+
+  const sandboxedRequire = (id: string): unknown => {
+    if (BLOCKED_MODULES.has(id)) {
+      throw new Error(`[Plugins] 安全策略阻止加载模块 "${id}"`);
+    }
+    return require(id);
+  };
+
+  const moduleObj: { exports: Partial<NahidaPlugin> } = { exports: {} };
+  const compiledFn = vm.runInThisContext(wrapper, { filename: indexPath }) as (
+    exports: Record<string, unknown>,
+    require: (id: string) => unknown,
+    module: { exports: Partial<NahidaPlugin> },
+    filename: string,
+    dirname: string,
+  ) => void;
+
+  compiledFn(moduleObj.exports, sandboxedRequire, moduleObj, indexPath, dir);
+  return moduleObj.exports;
+}
 
 // ── 模块状态 ──────────────────────────────────────────────────
 
@@ -104,10 +149,9 @@ function scanPlugins(): void {
         continue;
       }
 
-      // 加载插件代码
-      // 注意：这里使用 require 加载插件，插件需要导出 NahidaPlugin 对象
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const pluginModule = require(indexPath) as Partial<NahidaPlugin>;
+      // 加载插件代码（沙箱化，VULN-002 修复）
+      console.warn(`[Plugins] loading "${entry.name}" in sandboxed context (blocked: child_process, cluster, worker_threads)`);
+      const pluginModule = loadPluginSandboxed(indexPath);
       const plugin: NahidaPlugin = {
         manifest,
         hooks: pluginModule.hooks,

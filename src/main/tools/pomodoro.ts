@@ -96,6 +96,9 @@ let currentState: PomodoroState = {
 
 let currentConfig: PomodoroConfig = { ...DEFAULT_CONFIG };
 
+/** 状态锁：串行化 start/stop 操作，防止并发覆盖配置 */
+let stateLock = Promise.resolve();
+
 /** 状态变更监听器（供 scheduler 订阅） */
 type StateChangeListener = (state: PomodoroState) => void;
 const listeners = new Set<StateChangeListener>();
@@ -289,38 +292,48 @@ const pomodoroStartTool: ToolDefinition = {
   async execute(params): Promise<ToolResult> {
     const startTime = Date.now();
 
-    if (currentState.running) {
+    // 串行化：等待前一个 start/stop 完成
+    const prev = stateLock;
+    let release!: () => void;
+    stateLock = new Promise(r => { release = r; });
+    await prev;
+
+    try {
+      if (currentState.running) {
+        return {
+          ok: false,
+          data: {
+            message: '已有番茄钟在运行，请先停止再启动新番茄钟',
+            currentState: getPomodoroState(),
+          },
+          latencyMs: Date.now() - startTime,
+        };
+      }
+
+      // 更新配置
+      currentConfig = {
+        workMinutes: (params.work_minutes as number) ?? DEFAULT_CONFIG.workMinutes,
+        breakMinutes: (params.break_minutes as number) ?? DEFAULT_CONFIG.breakMinutes,
+        longBreakMinutes: (params.long_break_minutes as number) ?? DEFAULT_CONFIG.longBreakMinutes,
+        longBreakEvery: (params.long_break_every as number) ?? DEFAULT_CONFIG.longBreakEvery,
+        targetCount: (params.target_count as number) ?? DEFAULT_CONFIG.targetCount,
+      };
+
+      // 启动工作段
+      startWorkPhase(params.label as string | undefined);
+
       return {
-        ok: false,
+        ok: true,
         data: {
-          message: '已有番茄钟在运行，请先停止再启动新番茄钟',
-          currentState: getPomodoroState(),
+          message: `番茄钟已启动：工作 ${currentConfig.workMinutes} 分钟，休息 ${currentConfig.breakMinutes} 分钟`,
+          config: currentConfig,
+          state: getPomodoroState(),
         },
         latencyMs: Date.now() - startTime,
       };
+    } finally {
+      release();
     }
-
-    // 更新配置
-    currentConfig = {
-      workMinutes: (params.work_minutes as number) ?? DEFAULT_CONFIG.workMinutes,
-      breakMinutes: (params.break_minutes as number) ?? DEFAULT_CONFIG.breakMinutes,
-      longBreakMinutes: (params.long_break_minutes as number) ?? DEFAULT_CONFIG.longBreakMinutes,
-      longBreakEvery: (params.long_break_every as number) ?? DEFAULT_CONFIG.longBreakEvery,
-      targetCount: (params.target_count as number) ?? DEFAULT_CONFIG.targetCount,
-    };
-
-    // 启动工作段
-    startWorkPhase(params.label as string | undefined);
-
-    return {
-      ok: true,
-      data: {
-        message: `番茄钟已启动：工作 ${currentConfig.workMinutes} 分钟，休息 ${currentConfig.breakMinutes} 分钟`,
-        config: currentConfig,
-        state: getPomodoroState(),
-      },
-      latencyMs: Date.now() - startTime,
-    };
   },
 };
 

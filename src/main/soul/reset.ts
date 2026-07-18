@@ -66,10 +66,11 @@ const DIRS_TO_CLEAR: string[] = [];
 
 // ── 模块状态 ──────────────────────────────────────────────────
 
-let resetState: ResetState = {
-  awaitingConfirm: false,
-  requestTime: 0,
-};
+/** 按用户隔离的重置状态 Map，防止多用户并发覆盖 */
+const resetStates = new Map<string, ResetState>();
+
+/** 默认用户 ID（单用户场景兼容） */
+const DEFAULT_USER_ID = 'default';
 
 // ── 核心逻辑 ──────────────────────────────────────────────────
 
@@ -77,12 +78,14 @@ let resetState: ResetState = {
  * 请求重置（第一阶段）
  *
  * 返回确认提示，进入等待确认状态。
+ *
+ * @param userId 用户 ID（默认 'default'，多用户场景下按用户隔离）
  */
-export function requestReset(): { awaitingConfirm: boolean; message: string } {
-  resetState = {
+export function requestReset(userId: string = DEFAULT_USER_ID): { awaitingConfirm: boolean; message: string } {
+  resetStates.set(userId, {
     awaitingConfirm: true,
     requestTime: Date.now(),
-  };
+  });
 
   return {
     awaitingConfirm: true,
@@ -94,10 +97,13 @@ export function requestReset(): { awaitingConfirm: boolean; message: string } {
  * 执行重置（第二阶段，需要确认）
  *
  * @param force 是否强制重置（跳过确认）
+ * @param userId 用户 ID（默认 'default'，多用户场景下按用户隔离）
  */
-export function executeReset(force: boolean = false): ResetResult {
+export function executeReset(force: boolean = false, userId: string = DEFAULT_USER_ID): ResetResult {
+  const resetState = resetStates.get(userId);
+
   // 检查确认状态
-  if (!force && !resetState.awaitingConfirm) {
+  if (!force && (!resetState || !resetState.awaitingConfirm)) {
     return {
       success: false,
       resetItems: [],
@@ -107,8 +113,8 @@ export function executeReset(force: boolean = false): ResetResult {
   }
 
   // 检查超时
-  if (!force && Date.now() - resetState.requestTime > CONFIRM_TIMEOUT_MS) {
-    resetState.awaitingConfirm = false;
+  if (!force && resetState && Date.now() - resetState.requestTime > CONFIRM_TIMEOUT_MS) {
+    resetStates.delete(userId);
     return {
       success: false,
       resetItems: [],
@@ -118,7 +124,7 @@ export function executeReset(force: boolean = false): ResetResult {
   }
 
   // 重置状态
-  resetState.awaitingConfirm = false;
+  resetStates.delete(userId);
 
   const result: ResetResult = {
     success: true,
@@ -173,16 +179,21 @@ export function executeReset(force: boolean = false): ResetResult {
 
 /**
  * 取消重置请求
+ *
+ * @param userId 用户 ID（默认 'default'）
  */
-export function cancelReset(): void {
-  resetState.awaitingConfirm = false;
+export function cancelReset(userId: string = DEFAULT_USER_ID): void {
+  resetStates.delete(userId);
 }
 
 /**
  * 获取重置状态
+ *
+ * @param userId 用户 ID（默认 'default'）
  */
-export function getResetState(): ResetState {
-  return { ...resetState };
+export function getResetState(userId: string = DEFAULT_USER_ID): ResetState {
+  const state = resetStates.get(userId);
+  return state ? { ...state } : { awaitingConfirm: false, requestTime: 0 };
 }
 
 // ── 备份逻辑 ──────────────────────────────────────────────────

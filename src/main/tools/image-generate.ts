@@ -57,17 +57,68 @@ function ensureImagesDir(): void {
 
 // ── SSRF 防护 ─────────────────────────────────────────────────
 
+/**
+ * 检查后端 URL 是否安全（VULN-003 修复）
+ *
+ * 允许：
+ *   - localhost / 127.0.0.1 / ::1（本地生图后端）
+ *   - 公网地址（http / https）
+ *
+ * 阻止：
+ *   - 私网地址（10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16）
+ *   - 链路本地（169.254.0.0/16，含 AWS 元数据 169.254.169.254）
+ *   - CGNAT（100.64.0.0/10）
+ *   - 0.0.0.0/8
+ *   - IPv6 ULA（fc00::/7）和 link-local（fe80::/10）
+ */
 function isSafeBackendUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    // 仅允许 http/https
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+
     const hostname = parsed.hostname.toLowerCase();
-    // 允许 localhost / 127.0.0.1
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
-    // 其他公网地址仅允许 https
-    if (parsed.protocol === 'https:') return true;
-    return false;
+
+    // 解 IPv6 方括号
+    const cleanHost = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+
+    // 允许 localhost / 127.0.0.1 / ::1（本地生图后端）
+    if (cleanHost === 'localhost' || cleanHost === '127.0.0.1' || cleanHost === '::1' || cleanHost === '0:0:0:0:0:0:0:1') {
+      return true;
+    }
+
+    // 阻止 IPv6 ULA [fc00::]/7
+    if (cleanHost.startsWith('fc') || cleanHost.startsWith('fd')) return false;
+    // 阻止 IPv6 link-local [fe80::]/10
+    if (cleanHost.startsWith('fe8') || cleanHost.startsWith('fe9') ||
+        cleanHost.startsWith('fea') || cleanHost.startsWith('feb')) return false;
+
+    // 阻止 IPv4 回环 127.0.0.0/8（非 127.0.0.1 的其他回环也不允许）
+    if (cleanHost.startsWith('127.') && cleanHost !== '127.0.0.1') return false;
+    // 阻止 IPv4 私网 10.0.0.0/8
+    if (cleanHost.startsWith('10.')) return false;
+    // 阻止 IPv4 私网 172.16.0.0/12
+    if (cleanHost.startsWith('172.')) {
+      const parts = cleanHost.split('.');
+      const secondOctet = parseInt(parts[1] ?? '0', 10);
+      if (secondOctet >= 16 && secondOctet <= 31) return false;
+    }
+    // 阻止 IPv4 私网 192.168.0.0/16
+    if (cleanHost.startsWith('192.168.')) return false;
+    // 阻止 IPv4 链路本地 169.254.0.0/16（含 AWS 元数据）
+    if (cleanHost.startsWith('169.254.')) return false;
+    // 阻止 IPv4 CGNAT 100.64.0.0/10
+    if (cleanHost.startsWith('100.')) {
+      const parts = cleanHost.split('.');
+      const secondOctet = parseInt(parts[1] ?? '0', 10);
+      if (secondOctet >= 64 && secondOctet <= 127) return false;
+    }
+    // 阻止 0.0.0.0/8
+    if (cleanHost.startsWith('0.')) return false;
+
+    // 公网地址放行
+    return true;
   } catch {
     return false;
   }

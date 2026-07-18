@@ -18,6 +18,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { encryptString, decryptString, isEncryptionEnabled } from '../memory/crypto';
 import type { Config, OllamaConfig, ModelConfig, ApiConfig, SessionConfig, VoiceConfig } from '../../shared/types/config';
 
 // 重新导出类型，方便其他模块导入
@@ -199,9 +200,70 @@ function deepMergeConfig(base: Config, override: Partial<Config>): Config {
 const USER_CONFIG_FILE = path.resolve(process.cwd(), 'config.json');
 
 /**
+ * 加密配置中的敏感字段
+ *
+ * 对 api.deepseekKey、email.password、image.dalleApiKey、video.*.apiKey
+ * 调用 encryptString。如果加密未启用，返回 plain: 前缀（向后兼容）。
+ */
+function encryptSensitiveFields(cfg: Config): Config {
+  const result: Config = { ...cfg };
+
+  if (result.api?.deepseekKey) {
+    result.api = { ...result.api, deepseekKey: encryptString(result.api.deepseekKey) };
+  }
+  if (result.email?.password) {
+    result.email = { ...result.email, password: encryptString(result.email.password) };
+  }
+  if (result.image?.dalleApiKey) {
+    result.image = { ...result.image, dalleApiKey: encryptString(result.image.dalleApiKey) };
+  }
+  if (result.video?.volcanoApiKey) {
+    result.video = { ...result.video, volcanoApiKey: encryptString(result.video.volcanoApiKey) };
+  }
+  if (result.video?.runwayApiKey) {
+    result.video = { ...result.video, runwayApiKey: encryptString(result.video.runwayApiKey) };
+  }
+  if (result.video?.soraApiKey) {
+    result.video = { ...result.video, soraApiKey: encryptString(result.video.soraApiKey) };
+  }
+
+  return result;
+}
+
+/**
+ * 解密配置中的敏感字段
+ *
+ * 自动识别 enc: / plain: / 无前缀（兼容旧配置）。
+ */
+function decryptSensitiveFields(cfg: Partial<Config>): Partial<Config> {
+  const result: Partial<Config> = { ...cfg };
+
+  if (result.api?.deepseekKey) {
+    result.api = { ...result.api, deepseekKey: decryptString(result.api.deepseekKey) };
+  }
+  if (result.email?.password) {
+    result.email = { ...result.email, password: decryptString(result.email.password) };
+  }
+  if (result.image?.dalleApiKey) {
+    result.image = { ...result.image, dalleApiKey: decryptString(result.image.dalleApiKey) };
+  }
+  if (result.video?.volcanoApiKey) {
+    result.video = { ...result.video, volcanoApiKey: decryptString(result.video.volcanoApiKey) };
+  }
+  if (result.video?.runwayApiKey) {
+    result.video = { ...result.video, runwayApiKey: decryptString(result.video.runwayApiKey) };
+  }
+  if (result.video?.soraApiKey) {
+    result.video = { ...result.video, soraApiKey: decryptString(result.video.soraApiKey) };
+  }
+
+  return result;
+}
+
+/**
  * 保存用户配置到磁盘
  *
- * 只保存非默认值（与默认值相同的字段不写，避免配置文件冗余）。
+ * 敏感字段（API Key / 邮箱密码）经 AES-256-GCM 加密后写入（VULN-001 修复）。
  * 写入方式：原子写（先写 .tmp 再 rename）。
  */
 export function saveConfigToDisk(partialConfig: Partial<Config>): void {
@@ -216,18 +278,22 @@ export function saveConfigToDisk(partialConfig: Partial<Config>): void {
     voice: { ...current.voice, ...partialConfig.voice },
     email: { ...current.email, ...partialConfig.email },
     mcpServers: { ...current.mcpServers, ...partialConfig.mcpServers },
+    image: { ...current.image, ...partialConfig.image },
+    video: { ...current.video, ...partialConfig.video },
   };
 
-  // 更新内存中的 config
+  // 更新内存中的 config（内存中保持明文）
   config = merged;
 
-  // 写入磁盘
+  // 加密敏感字段后写入磁盘
+  const toWrite = isEncryptionEnabled() ? encryptSensitiveFields(merged) : merged;
+
   try {
-    const json = JSON.stringify(merged, null, 2);
+    const json = JSON.stringify(toWrite, null, 2);
     const tmpPath = `${USER_CONFIG_FILE}.tmp`;
     fs.writeFileSync(tmpPath, json, 'utf-8');
     fs.renameSync(tmpPath, USER_CONFIG_FILE);
-    console.log('[Config] saved to', USER_CONFIG_FILE);
+    console.log('[Config] saved to', USER_CONFIG_FILE, isEncryptionEnabled() ? '(encrypted)' : '(plaintext)');
   } catch (err) {
     console.error('[Config] save failed:', err);
     throw err;
@@ -237,6 +303,7 @@ export function saveConfigToDisk(partialConfig: Partial<Config>): void {
 /**
  * 从磁盘加载用户配置（覆盖内存中的默认值）
  *
+ * 敏感字段自动解密（VULN-001 修复）。
  * 启动时调用一次（在 initConfig 之前）。
  */
 export function loadUserConfigFromDisk(): void {
@@ -247,11 +314,11 @@ export function loadUserConfigFromDisk(): void {
 
   try {
     const content = fs.readFileSync(USER_CONFIG_FILE, 'utf-8');
-    const userConfig = JSON.parse(content) as Partial<Config>;
+    const rawConfig = JSON.parse(content) as Partial<Config>;
 
-    // 合并到环境变量（优先级：用户配置文件 > 环境变量 > 默认值）
-    // 这里简化处理：直接覆盖内存中的 config（initConfig 还没调用）
-    // 实际应该在 initConfig 时读取，这里只标记"有用户配置文件"
+    // 解密敏感字段
+    const userConfig = decryptSensitiveFields(rawConfig);
+
     console.log('[Config] loaded user config from', USER_CONFIG_FILE);
 
     // 存到全局，让 initConfig 合并

@@ -54,6 +54,9 @@ let initialized = false;
 const groups = new Map<string, GroupChat>();
 let config: GroupChatConfig = DEFAULT_CONFIG;
 
+/** 按群 ID 隔离的互斥锁，防止 broadcastMessage 并发写入竞态 */
+const groupMutex = new Map<string, Promise<void>>();
+
 function ensureDirectoryExists(dir: string): void {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -79,6 +82,7 @@ function saveGroup(group: GroupChat): void {
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
     console.error(`[GroupChat] save ${group.groupId} failed:`, err);
+    throw err;
   }
 }
 
@@ -265,103 +269,116 @@ export async function broadcastMessage(
   degradeDecision: DegradeDecision,
 ): Promise<GroupReply[]> {
   if (!initialized) initGroupChat();
-  const group = groups.get(groupId);
-  if (!group) return [];
 
-  const userMessage: GroupMessage = {
-    messageId: generateMessageId(),
-    groupId,
-    senderId: 'user',
-    senderName: '旅行者',
-    content,
-    timestamp: Date.now(),
-    isTokenLimited: false,
-  };
+  // 获取群 ID 级互斥锁，串行化广播以防止并发写入竞态
+  const prev = groupMutex.get(groupId) ?? Promise.resolve();
+  let release!: () => void;
+  const lock = new Promise<void>(resolve => { release = resolve; });
+  groupMutex.set(groupId, prev.finally(() => lock));
 
-  group.messages.push(userMessage);
-  if (group.messages.length > config.maxMessages) {
-    group.messages.shift();
-  }
-  group.lastActivity = Date.now();
-  saveGroup(group);
+  try {
+    await prev;
+    const group = groups.get(groupId);
+    if (!group) return [];
 
-  const aiMembers = group.members.filter(m => m.type === 'ai');
-  const replies: GroupReply[] = [];
+    const userMessage: GroupMessage = {
+      messageId: generateMessageId(),
+      groupId,
+      senderId: 'user',
+      senderName: '旅行者',
+      content,
+      timestamp: Date.now(),
+      isTokenLimited: false,
+    };
 
-  for (const member of aiMembers) {
-    const startTime = Date.now();
-    try {
-      const tokenLimit = member.tokenLimit;
-      const limitedContent = tokenLimit > 0
-        ? `${content}\n\n【系统提示】请将回复限制在${tokenLimit} token内，保持简洁。`
-        : content;
-
-      let responseContent = '';
-      await generateResponse(
-        `group_${groupId}_${member.memberId}`,
-        limitedContent,
-        'chat',
-        degradeDecision,
-        (delta: string) => {
-          responseContent += delta;
-        },
-      );
-
-      const isLimited = tokenLimit > 0 && countTokens(responseContent) > tokenLimit;
-      let finalContent = responseContent;
-
-      if (isLimited && tokenLimit > 0) {
-        finalContent = truncateToTokenLimit(responseContent, tokenLimit);
-      }
-
-      const reply: GroupReply = {
-        memberId: member.memberId,
-        memberName: member.name,
-        content: finalContent,
-        isTokenLimited: isLimited,
-        latencyMs: Date.now() - startTime,
-      };
-
-      replies.push(reply);
-
-      const aiMessage: GroupMessage = {
-        messageId: generateMessageId(),
-        groupId,
-        senderId: member.memberId,
-        senderName: member.name,
-        content: finalContent,
-        timestamp: Date.now(),
-        isTokenLimited: isLimited,
-      };
-
-      group.messages.push(aiMessage);
-      if (group.messages.length > config.maxMessages) {
-        group.messages.shift();
-      }
-    } catch (err) {
-      console.error(`[GroupChat] agent ${member.memberId} failed:`, err);
-      replies.push({
-        memberId: member.memberId,
-        memberName: member.name,
-        content: '（花冠微垂，沉默不语）',
-        isTokenLimited: false,
-        latencyMs: Date.now() - startTime,
-      });
+    group.messages.push(userMessage);
+    if (group.messages.length > config.maxMessages) {
+      group.messages.shift();
     }
-  }
+    group.lastActivity = Date.now();
+    saveGroup(group);
 
-  group.lastActivity = Date.now();
-  saveGroup(group);
-  return replies;
+    const aiMembers = group.members.filter(m => m.type === 'ai');
+    const replies: GroupReply[] = [];
+
+    for (const member of aiMembers) {
+      const startTime = Date.now();
+      try {
+        const tokenLimit = member.tokenLimit;
+        const limitedContent = tokenLimit > 0
+          ? `${content}\n\n【系统提示】请将回复限制在${tokenLimit} token内，保持简洁。`
+          : content;
+
+        let responseContent = '';
+        await generateResponse(
+          `group_${groupId}_${member.memberId}`,
+          limitedContent,
+          'chat',
+          degradeDecision,
+          (delta: string) => {
+            responseContent += delta;
+          },
+        );
+
+        const isLimited = tokenLimit > 0 && countTokens(responseContent) > tokenLimit;
+        let finalContent = responseContent;
+
+        if (isLimited && tokenLimit > 0) {
+          finalContent = truncateToTokenLimit(responseContent, tokenLimit);
+        }
+
+        const reply: GroupReply = {
+          memberId: member.memberId,
+          memberName: member.name,
+          content: finalContent,
+          isTokenLimited: isLimited,
+          latencyMs: Date.now() - startTime,
+        };
+
+        replies.push(reply);
+
+        const aiMessage: GroupMessage = {
+          messageId: generateMessageId(),
+          groupId,
+          senderId: member.memberId,
+          senderName: member.name,
+          content: finalContent,
+          timestamp: Date.now(),
+          isTokenLimited: isLimited,
+        };
+
+        group.messages.push(aiMessage);
+        if (group.messages.length > config.maxMessages) {
+          group.messages.shift();
+        }
+      } catch (err) {
+        console.error(`[GroupChat] agent ${member.memberId} failed:`, err);
+        replies.push({
+          memberId: member.memberId,
+          memberName: member.name,
+          content: '（花冠微垂，沉默不语）',
+          isTokenLimited: false,
+          latencyMs: Date.now() - startTime,
+        });
+      }
+    }
+
+    group.lastActivity = Date.now();
+    saveGroup(group);
+    return replies;
+  } finally {
+    release();
+    if (groupMutex.get(groupId) === lock) groupMutex.delete(groupId);
+  }
 }
 
-function countTokens(text: string): number {
+export function countTokens(text: string): number {
   const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
   const otherChars = text.replace(/[\u4e00-\u9fa5]/g, '').length;
   return chineseChars + Math.ceil(otherChars / 4);
 }
 
-function truncateToTokenLimit(text: string, limit: number): string {
+export function truncateToTokenLimit(text: string, limit: number): string {
   let tokenCount = 0;
   let result = '';
 
