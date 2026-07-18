@@ -443,11 +443,66 @@
 
 ---
 
-### 当前版本：`2.4.0`
+### v2.5.0 - 2026-07-17
+
+**里程碑：全模态闭环——让纳西妲能看见**
+
+- **Vision 输入管理器**（[vision/vision-manager.ts](file:///e:/Nahida%20agent/src/main/vision/vision-manager.ts)）
+  - `saveUploadedImage()`：接收 base64 → 存到 `data/media/` → 返回路径
+  - `analyzeImages()`：调用 ollama vision 模型（如 qwen2-vl）理解图片
+  - `processVisionRequest()`：完整流程（保存→分析→OCR→返回）
+  - 支持 PNG / JPEG / WebP / GIF，单张最大 10MB
+  - 图片宽高解析（PNG/JPEG 头部读取，纯 JS 无依赖）
+  - OCR 预留口（PaddleOCR / Tesseract，当前返回空）
+
+- **多模态输出编排器**（[vision/output-orchestrator.ts](file:///e:/Nahida%20agent/src/main/vision/output-orchestrator.ts)）
+  - `extractActionTags()`：从文本抽取 `（xxx）` 动作 tag
+  - `extractEmotion()`：抽取 `[emotion:xxx]` 标签
+  - `cleanTextForTTS()`：清洗文本供 TTS 朗读
+  - `emotionToLive2DExpression()`：情绪 → Live2D 表情映射
+  - `buildMultimodalOutput()`：统一编排文本→动作→情绪→TTS→Live2D
+
+- **Ollama Client 扩展**
+  - `OllamaChatMessage` 新增 `images?: string[]` 字段（vision 模型用）
+  - `ollamaChatStream` 透传 images 到 ollama HTTP 请求
+
+- **Session 存储扩展**
+  - `PersistedMessage` 新增 `images?: string[]` 字段
+  - `appendMessage` 支持 images 参数
+
+- **IPC 通道扩展**
+  - 新增 `IMAGE_UPLOAD`（image:upload）：渲染层上传图片
+  - 新增 `VISION_ANALYZE`（vision:analyze）：图像分析请求
+  - 新增 `VISION_RESULT`（vision:result）：分析结果推送
+  - `agentChatSchema` 新增 `images?: string[]` 字段
+
+- **agent:chat 集成**
+  - 当 payload.images 非空时走 vision 路径
+  - vision 结果 → 文本推送 + Live2D 动作 + TTS 合成
+  - 多模态消息持久化到 session（带图片路径）
+
+- **配置扩展**
+  - 新增 `VisionConfig` 接口（model / ocrEnabled / maxImages / maxImageSize）
+  - `Config` 接口添加 `vision?: VisionConfig`
+
+- **命令接口**
+  - `/multimodal`：查看全模态闭环帮助
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.5.0 清单**：
+- ✅ Vision 输入管理器（图片保存 + 模型分析 + OCR 预留）
+- ✅ 多模态输出编排器（文本→动作→情绪→TTS→Live2D）
+- ✅ Ollama Client images 字段扩展
+- ✅ Session 存储多模态消息支持
+- ✅ 3 个新 IPC 通道（image:upload / vision:analyze / vision:result）
+- ✅ agent:chat vision 路径集成
+- ✅ VisionConfig 类型扩展
+- ✅ /multimodal 命令
 
 - 已完成：Phase 1 全部核心功能 + 日历/闹钟调度 + 搜索可信度 + 图表仪表盘 + API 余额显示 + 邮箱 MCP + 图表扩展 + 安全埋桩 + **灵魂三维（遗忘/梦境/元认知）** + **纪念日感知 + RAG 三阶段检索** + **六顶帽多 Agent 协作** + **知识图谱落地 + 一键重置 + 指令层级增强** + **人格分叉 A/B 测试 + 插件系统雏形** + **语音输入 STT + 对话导出 + 全局快捷键** + **桌面整理 + 文件搜索 + 番茄钟专注模式** + **社区共享协议 + 生图工具** + **生视频工具** + **歌曲翻唱（RVC 实装）** + **Siri 式语音唤醒（Whisper.cpp STT）** + **群聊模块（多 Agent 群聊 + token 限制 + Agent 管理）**
-- 状态：v2.4.0 已封板
-- 下一步：v2.5+ 全模态闭环 + 视觉感知
+- 状态：v2.5.0 已封板
+- 下一步：v2.6+ 渲染层图片上传 UI + OCR 实装 + 视觉感知深度
 
 ---
 

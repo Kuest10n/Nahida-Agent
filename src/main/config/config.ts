@@ -280,6 +280,7 @@ export function saveConfigToDisk(partialConfig: Partial<Config>): void {
     mcpServers: { ...current.mcpServers, ...partialConfig.mcpServers },
     image: { ...current.image, ...partialConfig.image },
     video: { ...current.video, ...partialConfig.video },
+    vision: { ...current.vision, ...partialConfig.vision },
   };
 
   // 更新内存中的 config（内存中保持明文）

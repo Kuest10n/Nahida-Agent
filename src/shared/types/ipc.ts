@@ -28,6 +28,9 @@ export enum IpcChannel {
   STT_STOP = 'stt:stop',
   STT_RESULT = 'stt:result',
   EXPORT_CONVERSATION = 'export:conversation',
+  IMAGE_UPLOAD = 'image:upload',
+  VISION_ANALYZE = 'vision:analyze',
+  VISION_RESULT = 'vision:result',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -35,6 +38,8 @@ export const agentChatSchema = z.object({
   message: z.string().min(1),
   mode: z.enum(['casual', 'think', 'plan']).default('casual'),
   sessionId: z.string().optional(),
+  /** v2.5: 附带的图片 base64 列表（不含 data:image/xxx;base64, 前缀） */
+  images: z.array(z.string()).optional(),
 });
 export type AgentChatPayload = z.infer<typeof agentChatSchema>;
 
@@ -279,6 +284,46 @@ export const balanceGetResultSchema = z.object({
 });
 export type BalanceGetResultPayload = z.infer<typeof balanceGetResultSchema>;
 
+// ---------- image:upload（渲染层 → main，用户上传图片） ----------
+export const imageUploadSchema = z.object({
+  /** base64 编码（不含 data:image/xxx;base64, 前缀） */
+  base64: z.string().min(1),
+  /** MIME 类型，如 image/png / image/jpeg */
+  mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']).default('image/png'),
+  /** 来源：文件选择 / 剪贴板粘贴 / 拖拽 */
+  source: z.enum(['file', 'clipboard', 'drag']).default('file'),
+  /** 原始文件名（可选） */
+  filename: z.string().optional(),
+});
+export type ImageUploadPayload = z.infer<typeof imageUploadSchema>;
+
+export const imageUploadResultSchema = z.object({
+  ok: z.boolean(),
+  /** 存储到 data/media/ 的相对路径 */
+  path: z.string().optional(),
+  /** 用于 ollama vision 的 base64（已清洗） */
+  base64: z.string().optional(),
+  /** 缩略图 base64（用于渲染层显示，最大 200x200） */
+  thumbnail: z.string().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  error: z.string().optional(),
+});
+export type ImageUploadResultPayload = z.infer<typeof imageUploadResultSchema>;
+
+// ---------- vision:analyze（main → 渲染层，推送分析结果） ----------
+export const visionResultSchema = z.object({
+  sessionId: z.string(),
+  /** 分析出的文本描述 */
+  description: z.string(),
+  /** OCR 识别的文字（如果有） */
+  ocrText: z.string().optional(),
+  /** 关联的图片路径 */
+  imagePaths: z.array(z.string()),
+  timestamp: z.number(),
+});
+export type VisionResultPayload = z.infer<typeof visionResultSchema>;
+
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
   [IpcChannel.AGENT_CHAT]: agentChatSchema,
@@ -311,6 +356,9 @@ export const ipcSchemas = {
     format: z.enum(['markdown', 'json']),
     includeMetadata: z.boolean().optional(),
   }),
+  [IpcChannel.IMAGE_UPLOAD]: imageUploadSchema,
+  [IpcChannel.VISION_ANALYZE]: z.object({}).passthrough(),
+  [IpcChannel.VISION_RESULT]: visionResultSchema,
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

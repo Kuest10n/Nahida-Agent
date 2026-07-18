@@ -138,6 +138,20 @@ export interface VideoConfig {
   defaultAspectRatio?: string;
 }
 
+/** Vision 输入配置（v2.5，图像理解） */
+export interface VisionConfig {
+  /** Vision 模型名（如 qwen2-vl / llava / minicpm-v） */
+  model?: string;
+  /** 是否启用 OCR（本地 PaddleOCR / Tesseract，预留口） */
+  ocrEnabled?: boolean;
+  /** OCR 引擎路径（预留） */
+  ocrEnginePath?: string;
+  /** 单次最大图片数 */
+  maxImages?: number;
+  /** 图片最大边长（超过则等比缩放，省显存） */
+  maxImageSize?: number;
+}
+
 /** 应用配置 */
 export interface Config {
   ollama: OllamaConfig;
@@ -151,4 +165,6 @@ export interface Config {
   image?: ImageConfig;
   /** 生视频配置（v2.1，可选） */
   video?: VideoConfig;
+  /** Vision 输入配置（v2.5，可选） */
+  vision?: VisionConfig;
 }

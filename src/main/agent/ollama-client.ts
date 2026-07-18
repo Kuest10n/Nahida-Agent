@@ -18,7 +18,7 @@ function getTimeoutMs(): number {
 /** ollama chat 请求体 */
 interface OllamaChatRequest {
   model: string;
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+  messages: OllamaChatMessage[];
   stream: boolean;
   options?: {
     temperature?: number;
@@ -27,6 +27,14 @@ interface OllamaChatRequest {
     /** KV cache 保活时间，避免冷启动 */
     keep_alive?: string;
   };
+}
+
+/** ollama chat 消息（v2.5 扩展 images 字段支持 vision） */
+export interface OllamaChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  /** v2.5: vision 模型的图片 base64 列表（不含前缀） */
+  images?: string[];
 }
 
 /** ollama 流式返回的单行 NDJSON */
@@ -50,7 +58,7 @@ export type StreamCallback = (delta: string, done: boolean) => void;
  */
 export async function ollamaChatStream(
   model: string,
-  messages: OllamaChatRequest['messages'],
+  messages: OllamaChatMessage[],
   onDelta: StreamCallback,
   options?: OllamaChatRequest['options'],
 ): Promise<string> {

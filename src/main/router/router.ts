@@ -26,7 +26,7 @@ import { DegradeStrategy, type ModelTier, type DegradeReason, type DegradeDecisi
 export type RouteIntent = 'chat' | 'think' | 'tool' | 'command' | 'unknown';
 
 /** 命令类型（预设命令） */
-export type CommandType = '/clear' | '/help' | '/switch-model' | '/stats' | '/switch-persona' | '/balance' | '/hat' | '/reset' | '/ab' | '/plugin' | '/pomodoro' | '/package' | '/wakeup' | '/group';
+export type CommandType = '/clear' | '/help' | '/switch-model' | '/stats' | '/switch-persona' | '/balance' | '/hat' | '/reset' | '/ab' | '/plugin' | '/pomodoro' | '/package' | '/wakeup' | '/group' | '/multimodal';
 
 /** 路由结果 */
 export interface RouteResult {
@@ -62,6 +62,7 @@ const COMMAND_PATTERNS: Record<string, CommandType> = {
   '/package': '/package',
   '/wakeup': '/wakeup',
   '/group': '/group',
+  '/multimodal': '/multimodal',
 };
 
 // ── 关键词意图映射 ────────────────────────────────────────────

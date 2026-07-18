@@ -19,6 +19,8 @@ const INVOKE_CHANNELS = new Set<string>([
   IpcChannel.STT_STOP,
   IpcChannel.STT_RESULT,
   IpcChannel.EXPORT_CONVERSATION,
+  IpcChannel.IMAGE_UPLOAD,
+  IpcChannel.VISION_ANALYZE,
 ]);
 
 // 渲染层能监听的通道（main → renderer 单向推）
@@ -29,6 +31,7 @@ const LISTEN_CHANNELS = new Set<string>([
   IpcChannel.LIVE2D_ACTION,
   IpcChannel.TTS_CHUNK,
   IpcChannel.RAND_ERROR_REPORT,
+  IpcChannel.VISION_RESULT,
 ]);
 
 // 给渲染层暴露的 API

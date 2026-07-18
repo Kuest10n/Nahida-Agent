@@ -1,4 +1,4 @@
-import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import { IpcChannel, type AgentChatPayload } from '../../shared/types/ipc';
 import { registerValidatedHandler } from './validate';
 import { Router, type CommandType } from '../router/router';
@@ -25,6 +25,8 @@ import { formatPluginList, enablePlugin, disablePlugin } from '../plugins/plugin
 import { startSTT, stopSTT, receiveResult, switchBackend, getSTTState, type STTResult } from '../voice/stt';
 import { startWakeup, stopWakeup, toggleWakeup, getWakeupState } from '../voice/voice-wakeup';
 import { exportConversation, getDefaultExportPath, type ExportFormat } from '../memory/exporter';
+import { appendMessage } from '../memory/session-store';
+import { saveUploadedImage, processVisionRequest } from '../vision/vision-manager';
 import { getPomodoroState } from '../tools/pomodoro';
 import { getTool } from '../tools/registry';
 import { buildPackage } from '../community/package-builder';
@@ -57,7 +59,7 @@ const ttsScheduler = new TtsScheduler(new GptSoVitsAdapter());
 // ── 命令意图的预设回复（不走模型，省 token） ──
 const COMMAND_RESPONSES: Record<CommandType, string> = {
   '/clear': '（花冠微垂，指尖轻拂虚空屏）……心识印记已清空，新的对话开始啦。',
-  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats /switch-persona /balance /hat /pomodoro /package /wakeup',
+  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats /switch-persona /balance /hat /pomodoro /package /wakeup /group /multimodal',
   '/switch-model': '（虚空屏微光一闪）……模型切换功能还在生长中，再等等吧。',
   '/stats': '（轻托腮）……统计功能还在生长中，再等等吧。',
   '/switch-persona': '（花冠微颤）……人格切换功能已就绪，试试 /switch-persona nahida 或 /switch-persona ti-bao 吧。',
@@ -70,6 +72,7 @@ const COMMAND_RESPONSES: Record<CommandType, string> = {
   '/package': '（指尖虚空拨动）……社区共享包管理。',
   '/wakeup': '（花冠轻转）……语音唤醒模式。',
   '/group': '（花冠轻转）……群聊模式。',
+  '/multimodal': '（花冠轻转，虚空屏展开）……全模态闭环已就绪。在输入框旁边的📎按钮上传图片，或者直接粘贴/拖拽图片，我就能看到啦。需要配置 Vision 模型（如 qwen2-vl）才能使用图像理解功能哦。',
 };
 
 // T5 Agent 编排：路由层 → generateResponse → 四审 → live2d action
@@ -588,6 +591,68 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         sessionId,
         timestamp: Date.now(),
       });
+    } else if (payload.images && payload.images.length > 0) {
+      // v2.5: 多模态输入 — 用户附带图片，走 vision 路径
+      const visionResult = await processVisionRequest(
+        payload.images,
+        message,
+        (delta: string, done: boolean) => {
+          mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+            delta,
+            finishReason: done ? 'stop' : undefined,
+            sessionId,
+            timestamp: Date.now(),
+          });
+        },
+      );
+
+      // 推送 vision 结果
+      mainWindow.webContents.send(IpcChannel.VISION_RESULT, {
+        sessionId,
+        description: visionResult.description,
+        ocrText: visionResult.ocrText,
+        imagePaths: visionResult.imagePaths,
+        timestamp: Date.now(),
+      });
+
+      fullOutput = visionResult.description;
+
+      // 记录到 session（带图片路径）
+      appendMessage(sessionId, 'user', message, undefined, visionResult.imagePaths);
+      appendMessage(sessionId, 'assistant', fullOutput, undefined);
+
+      // 后续走 TTS + Live2D 联动（与普通对话一致）
+      const emotionEnum = resolveActionEmotion(fullOutput) ?? NahidaEmotion.Greeting;
+      const expression = resolveExpression(emotionEnum);
+      live2dWindow.webContents.send(IpcChannel.LIVE2D_ACTION, {
+        actionTag: fullOutput.match(/[（(]([^）)]{1,20})[）)]/)?.[0] ?? '',
+        expression,
+        priority: 0,
+      });
+
+      // TTS 合成（清洗动作 tag 后）
+      const ttsText = stripActionTags(fullOutput);
+      if (ttsText.trim()) {
+        void ttsScheduler.enqueue({
+          text: ttsText,
+          emotion: emotionEnum,
+          sessionId,
+        }).then((result) => {
+          if (!result) return;
+          mainWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+            chunkIndex: 0,
+            totalChunks: 1,
+            audioBase64: result.audioBase64,
+            voiceType: emotionEnum,
+          });
+          live2dWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+            chunkIndex: 0,
+            totalChunks: 1,
+            audioBase64: result.audioBase64,
+            voiceType: emotionEnum,
+          });
+        });
+      }
     } else {
       // 非命令意图：调用 Agent Core 真实生成
       const agentResult = await generateResponse(
@@ -886,6 +951,44 @@ ${payload.content}
       filePath,
       includeMetadata: params.includeMetadata ?? true,
     });
+    return result;
+  });
+
+  // v2.5: 图片上传
+  registerValidatedHandler(IpcChannel.IMAGE_UPLOAD, async (_event, payload) => {
+    const params = payload as { base64: string; mimeType: string; source?: string; filename?: string };
+    const result = saveUploadedImage(params.base64, params.mimeType);
+    return result;
+  });
+
+  // v2.5: Vision 分析
+  registerValidatedHandler(IpcChannel.VISION_ANALYZE, async (event, payload) => {
+    const params = payload as { images: string[]; prompt: string; sessionId?: string };
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const sessionId = params.sessionId ?? 'default';
+
+    const result = await processVisionRequest(
+      params.images,
+      params.prompt,
+      (delta: string, done: boolean) => {
+        win?.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+          delta,
+          finishReason: done ? 'stop' : undefined,
+          sessionId,
+          timestamp: Date.now(),
+        });
+      },
+    );
+
+    // 推送结果到渲染层
+    win?.webContents.send(IpcChannel.VISION_RESULT, {
+      sessionId,
+      description: result.description,
+      ocrText: result.ocrText,
+      imagePaths: result.imagePaths,
+      timestamp: Date.now(),
+    });
+
     return result;
   });
 }

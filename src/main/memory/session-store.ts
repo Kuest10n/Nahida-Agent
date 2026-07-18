@@ -36,6 +36,8 @@ export interface PersistedMessage {
   timestamp: number;
   /** 循环日志（T/F/Tk/R 四段，仅 assistant 消息有） */
   cycleLog?: CycleLogEntry[];
+  /** v2.5: 附带的图片路径列表（存 data/media/ 下的相对路径） */
+  images?: string[];
 }
 
 /** 循环日志条目（与 agent-core 的 CycleLogEntry 对齐） */
@@ -174,6 +176,8 @@ export function appendMessage(
   role: 'user' | 'assistant',
   content: string,
   cycleLog?: CycleLogEntry[],
+  /** v2.5: 附带的图片路径列表 */
+  images?: string[],
 ): void {
   if (!initialized) loadSessions();
 
@@ -186,7 +190,7 @@ export function appendMessage(
   }
 
   session.lastActivity = now;
-  session.messages.push({ role, content, timestamp: now, cycleLog });
+  session.messages.push({ role, content, timestamp: now, cycleLog, images });
 
   // debounce 写盘（scheduleSave 内部自己处理互斥锁）
   scheduleSave(sessionId);
