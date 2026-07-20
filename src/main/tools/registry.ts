@@ -15,7 +15,7 @@
  * 后续 MCP 接入：MCP Server 注册的 tool 转成本注册表的 ToolDefinition 即可无缝接入。
  */
 
-import { z, type ZodType } from 'zod';
+import { type ZodType } from 'zod';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
@@ -52,16 +52,6 @@ export interface ToolContext {
   userMessage: string;
 }
 
-/** OpenAI function-calling 兼容的 tool schema（喂给 LLM） */
-export interface OpenAIToolSchema {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>; // JSON Schema
-  };
-}
-
 // ── 注册表主体 ────────────────────────────────────────────────
 
 /** 已注册的工具（按 name 索引） */
@@ -96,94 +86,4 @@ export function getTool(name: string): ToolDefinition | undefined {
 /** 列举所有已注册工具名 */
 export function listToolNames(): string[] {
   return Array.from(registry.keys());
-}
-
-/**
- * 生成 OpenAI function-calling 兼容的 tool schema 列表
- *
- * 喂给 LLM 的 tools 参数用这个。ollama 也兼容此格式。
- */
-export function buildToolSchemasForLLM(): OpenAIToolSchema[] {
-  const schemas: OpenAIToolSchema[] = [];
-  for (const tool of registry.values()) {
-    schemas.push({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        // zod schema → JSON Schema
-        parameters: zodToJsonSchema(tool.parameters),
-      },
-    });
-  }
-  return schemas;
-}
-
-/** 清空注册表（测试用） */
-export function clearRegistry(): void {
-  registry.clear();
-}
-
-// ── zod → JSON Schema 转换（轻量版） ─────────────────────────
-
-/**
- * 把 zod schema 转成 JSON Schema（喂给 LLM 的工具参数描述）
- *
- * 只处理常见类型：string/number/boolean/array/object/enum/optional。
- * 复杂场景请直接写 JSON Schema，别依赖这个函数。
- */
-function zodToJsonSchema(schema: ToolParameters): Record<string, unknown> {
-  // zod 内部有 ._def.type 描述种类，但跨版本不稳定
-  // 这里用 instanceof 判断，稳妥
-  if (schema instanceof z.ZodObject) {
-    const shape = schema.shape;
-    const properties: Record<string, unknown> = {};
-    const required: string[] = [];
-
-    for (const [key, value] of Object.entries(shape)) {
-      properties[key] = zodToJsonSchema(value as ToolParameters);
-
-      // 非可选字段加入 required
-      if (!(value instanceof z.ZodOptional)) {
-        required.push(key);
-      }
-    }
-
-    return {
-      type: 'object',
-      properties,
-      ...(required.length > 0 ? { required } : {}),
-    };
-  }
-
-  if (schema instanceof z.ZodString) {
-    return { type: 'string' };
-  }
-
-  if (schema instanceof z.ZodNumber) {
-    return { type: 'number' };
-  }
-
-  if (schema instanceof z.ZodBoolean) {
-    return { type: 'boolean' };
-  }
-
-  if (schema instanceof z.ZodArray) {
-    return {
-      type: 'array',
-      items: zodToJsonSchema(schema.element as ToolParameters),
-    };
-  }
-
-  if (schema instanceof z.ZodEnum) {
-    return { type: 'string', enum: schema.options };
-  }
-
-  if (schema instanceof z.ZodOptional) {
-    // 可选类型 → 递归解包内层
-    return zodToJsonSchema(schema.unwrap() as ToolParameters);
-  }
-
-  // 兜底：unknown
-  return {};
 }

@@ -26,7 +26,7 @@ import { DegradeStrategy, type ModelTier, type DegradeReason, type DegradeDecisi
 export type RouteIntent = 'chat' | 'think' | 'tool' | 'command' | 'unknown';
 
 /** 命令类型（预设命令） */
-export type CommandType = '/clear' | '/help' | '/switch-model' | '/stats' | '/switch-persona' | '/balance' | '/hat' | '/reset' | '/ab' | '/plugin' | '/pomodoro' | '/package' | '/wakeup' | '/group' | '/multimodal';
+export type CommandType = '/clear' | '/help' | '/switch-model' | '/stats' | '/switch-persona' | '/balance' | '/hat' | '/reset' | '/ab' | '/plugin' | '/pomodoro' | '/package' | '/wakeup' | '/group' | '/multimodal' | '/screenshot' | '/video' | '/monitor';
 
 /** 路由结果 */
 export interface RouteResult {
@@ -63,6 +63,9 @@ const COMMAND_PATTERNS: Record<string, CommandType> = {
   '/wakeup': '/wakeup',
   '/group': '/group',
   '/multimodal': '/multimodal',
+  '/screenshot': '/screenshot',
+  '/video': '/video',
+  '/monitor': '/monitor',
 };
 
 // ── 关键词意图映射 ────────────────────────────────────────────
@@ -72,6 +75,15 @@ const TOOL_KEYWORDS = ['搜索', '查询', '获取', '打开', '创建', '删除
 
 /** 深入思考关键词（命中则路由到 think 意图） */
 const THINK_KEYWORDS = ['为什么', '分析', '思考', '推理', '规划', '方案', '策略'];
+
+// 预编译关键词正则（一次编译复用，避免每次路由都遍历数组）
+const TOOL_KEYWORD_RE = new RegExp(TOOL_KEYWORDS.map(escapeRegExp).join('|'));
+const THINK_KEYWORD_RE = new RegExp(THINK_KEYWORDS.map(escapeRegExp).join('|'));
+
+/** 转义正则特殊字符（关键词可能含特殊字符） */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // ── 路由层主体 ────────────────────────────────────────────────
 
@@ -220,13 +232,13 @@ export class Router {
 
   /** 根据关键词判断意图 */
   private matchKeywordIntent(message: string): RouteIntent {
-    // 工具调用关键词（中文 + 英文）
-    if (TOOL_KEYWORDS.some(kw => message.includes(kw))) {
+    // 工具调用关键词（一次正则匹配，避免遍历数组）
+    if (TOOL_KEYWORD_RE.test(message)) {
       return 'tool';
     }
 
-    // 深入思考关键词（中文）
-    if (THINK_KEYWORDS.some(kw => message.includes(kw))) {
+    // 深入思考关键词
+    if (THINK_KEYWORD_RE.test(message)) {
       return 'think';
     }
 

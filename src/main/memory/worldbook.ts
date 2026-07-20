@@ -46,6 +46,9 @@ const MIN_PRIORITY_THRESHOLD = 70;
 /** 已加载的 worldbook 条目（启动时一次性加载，运行时只读） */
 let loadedEntries: WorldbookEntry[] = [];
 
+/** 倒排索引：trigger 关键词 → 关联条目列表（用于 O(1) 召回） */
+let triggerIndex: Map<string, WorldbookEntry[]> = new Map();
+
 /** 是否已初始化 */
 let initialized = false;
 
@@ -123,9 +126,23 @@ export function loadWorldbook(): void {
     // 按 priority 降序排（同 priority 按文件名稳定排）
     entries.sort((a, b) => b.priority - a.priority || a.fileName.localeCompare(b.fileName));
 
+    // 构建倒排索引：同一 trigger 可能命中多个 entry，合并避免重复 includes()
+    const idx = new Map<string, WorldbookEntry[]>();
+    for (const entry of entries) {
+      for (const trigger of entry.triggers) {
+        const list = idx.get(trigger);
+        if (list) {
+          list.push(entry);
+        } else {
+          idx.set(trigger, [entry]);
+        }
+      }
+    }
+
     loadedEntries = entries;
+    triggerIndex = idx;
     initialized = true;
-    console.log(`[Worldbook] loaded ${entries.length} entries from ${files.length} files`);
+    console.log(`[Worldbook] loaded ${entries.length} entries from ${files.length} files, ${idx.size} unique triggers`);
   } catch (err) {
     console.error('[Worldbook] load failed:', err);
     initialized = true; // 失败也标记，避免重复尝试
@@ -147,21 +164,28 @@ export function recallWorldbook(
   maxEntries: number = MAX_RECALL_ENTRIES,
 ): WorldbookEntry[] {
   if (!initialized) loadWorldbook();
-  if (loadedEntries.length === 0) return [];
+  if (loadedEntries.length === 0 || triggerIndex.size === 0) return [];
 
-  const hits: WorldbookEntry[] = [];
+  const hitSet = new Set<WorldbookEntry>();
 
-  for (const entry of loadedEntries) {
-    // priority 低于阈值的不召回（基础条目都该 ≥70）
-    if (entry.priority < MIN_PRIORITY_THRESHOLD) continue;
-
-    // 任一 trigger 关键词命中即算该 entry 命中
-    const matched = entry.triggers.some(t => userMessage.includes(t));
-    if (matched) hits.push(entry);
+  // 利用倒排索引：遍历 unique triggers，而非所有 entry
+  for (const [trigger, entries] of triggerIndex.entries()) {
+    if (userMessage.includes(trigger)) {
+      for (const entry of entries) {
+        // priority 过滤 + 去重
+        if (entry.priority >= MIN_PRIORITY_THRESHOLD) {
+          hitSet.add(entry);
+          if (hitSet.size >= maxEntries) {
+            // 已够数，直接返回（依赖加载时的 priority 降序）
+            return Array.from(hitSet);
+          }
+        }
+      }
+    }
   }
 
-  // 已按 priority 降序排过，直接切 top N
-  return hits.slice(0, maxEntries);
+  // 已按 priority 降序排过，Set 遍历顺序即插入顺序
+  return Array.from(hitSet).slice(0, maxEntries);
 }
 
 /** 获取已加载的全部条目（调试用） */
@@ -173,5 +197,6 @@ export function listLoadedEntries(): WorldbookEntry[] {
 /** 重置模块状态（测试用，生产环境不应调用） */
 export function resetWorldbook(): void {
   loadedEntries = [];
+  triggerIndex = new Map();
   initialized = false;
 }

@@ -31,6 +31,24 @@ export enum IpcChannel {
   IMAGE_UPLOAD = 'image:upload',
   VISION_ANALYZE = 'vision:analyze',
   VISION_RESULT = 'vision:result',
+  /** v2.9: 区域截图 — main → overlay 窗口，启动选区 */
+  SCREENSHOT_REGION_START = 'screenshot:region-start',
+  /** v2.9: 区域截图 — overlay 窗口 → main，回传选区坐标 */
+  SCREENSHOT_REGION_RESULT = 'screenshot:region-result',
+  /** v2.9: 区域截图 — overlay 窗口 → main，用户取消 */
+  SCREENSHOT_REGION_CANCEL = 'screenshot:region-cancel',
+  /** v2.12: 视频上传 */
+  VIDEO_UPLOAD = 'video:upload',
+  /** v2.12: 视频分析结果推送 */
+  VIDEO_RESULT = 'video:result',
+  /** v2.16: 屏幕实时监控开始 */
+  MONITOR_START = 'monitor:start',
+  /** v2.16: 屏幕实时监控停止 */
+  MONITOR_STOP = 'monitor:stop',
+  /** v2.16: 屏幕实时监控状态查询 */
+  MONITOR_STATE = 'monitor:state',
+  /** v2.16: 监控帧差事件推送 */
+  MONITOR_FRAME = 'monitor:frame',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -312,17 +330,87 @@ export const imageUploadResultSchema = z.object({
 export type ImageUploadResultPayload = z.infer<typeof imageUploadResultSchema>;
 
 // ---------- vision:analyze（main → 渲染层，推送分析结果） ----------
+/** v2.14：OCR 置信度摘要（vision / video 共用） */
+export const ocrConfidenceSchema = z.object({
+  average: z.number(),
+  minimum: z.number(),
+  lowCount: z.number(),
+  totalLines: z.number(),
+});
+export type OcrConfidencePayload = z.infer<typeof ocrConfidenceSchema>;
+
 export const visionResultSchema = z.object({
   sessionId: z.string(),
   /** 分析出的文本描述 */
   description: z.string(),
   /** OCR 识别的文字（如果有） */
   ocrText: z.string().optional(),
+  /** v2.14：OCR 置信度摘要 */
+  ocrConfidence: ocrConfidenceSchema.optional(),
   /** 关联的图片路径 */
   imagePaths: z.array(z.string()),
   timestamp: z.number(),
 });
 export type VisionResultPayload = z.infer<typeof visionResultSchema>;
+
+// ---------- screenshot:region-start（main → overlay 窗口，启动选区） ----------
+export const screenshotRegionStartSchema = z.object({
+  /** 屏幕物理像素尺寸（用于坐标转换） */
+  screenWidth: z.number(),
+  screenHeight: z.number(),
+  /** 设备像素比（DPR） */
+  devicePixelRatio: z.number().default(1),
+});
+export type ScreenshotRegionStartPayload = z.infer<typeof screenshotRegionStartSchema>;
+
+// ---------- screenshot:region-result（overlay 窗口 → main，回传选区） ----------
+export const screenshotRegionResultSchema = z.object({
+  /** 选区坐标（屏幕物理像素） */
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+export type ScreenshotRegionResultPayload = z.infer<typeof screenshotRegionResultSchema>;
+
+// ---------- screenshot:region-cancel（overlay 窗口 → main，用户取消） ----------
+export const screenshotRegionCancelSchema = z.object({});
+export type ScreenshotRegionCancelPayload = z.infer<typeof screenshotRegionCancelSchema>;
+
+// ---------- video:upload（渲染层 → main，上传视频文件） ----------
+export const videoUploadSchema = z.object({
+  /** 视频文件绝对路径 */
+  filePath: z.string(),
+  /** 视频文件名 */
+  fileName: z.string(),
+  /** 视频大小（字节） */
+  fileSize: z.number(),
+  sessionId: z.string(),
+  /** 可选的用户提问 */
+  prompt: z.string().optional(),
+});
+export type VideoUploadPayload = z.infer<typeof videoUploadSchema>;
+
+// ---------- video:result（main → 渲染层，视频分析结果） ----------
+export const videoResultSchema = z.object({
+  sessionId: z.string(),
+  /** 分析描述 */
+  description: z.string(),
+  /** 抽取的帧数 */
+  frameCount: z.number(),
+  /** 视频时长（秒） */
+  duration: z.number(),
+  /** 帧图片路径 */
+  imagePaths: z.array(z.string()),
+  /** 抽帧策略：scene / uniform / mixed */
+  strategy: z.enum(['scene', 'uniform', 'mixed']).optional(),
+  /** OCR 文字（如果启用） */
+  ocrText: z.string().optional(),
+  /** v2.14：OCR 置信度摘要 */
+  ocrConfidence: ocrConfidenceSchema.optional(),
+  timestamp: z.number(),
+});
+export type VideoResultPayload = z.infer<typeof videoResultSchema>;
 
 // ---------- 全量校验映射（main ipc/validate.ts 用） ----------
 export const ipcSchemas = {
@@ -359,6 +447,28 @@ export const ipcSchemas = {
   [IpcChannel.IMAGE_UPLOAD]: imageUploadSchema,
   [IpcChannel.VISION_ANALYZE]: z.object({}).passthrough(),
   [IpcChannel.VISION_RESULT]: visionResultSchema,
+  [IpcChannel.SCREENSHOT_REGION_START]: screenshotRegionStartSchema,
+  [IpcChannel.SCREENSHOT_REGION_RESULT]: screenshotRegionResultSchema,
+  [IpcChannel.SCREENSHOT_REGION_CANCEL]: screenshotRegionCancelSchema,
+  [IpcChannel.VIDEO_UPLOAD]: videoUploadSchema,
+  [IpcChannel.VIDEO_RESULT]: videoResultSchema,
+  // v2.16: 屏幕实时监控
+  [IpcChannel.MONITOR_START]: z.object({
+    intervalMs: z.number().optional(),
+    threshold: z.number().optional(),
+    autoAnalyze: z.boolean().optional(),
+  }),
+  [IpcChannel.MONITOR_STOP]: z.object({}),
+  [IpcChannel.MONITOR_STATE]: z.object({}),
+  [IpcChannel.MONITOR_FRAME]: z.object({
+    type: z.enum(['started', 'stopped']),
+    state: z.object({
+      isActive: z.boolean(),
+      frameCount: z.number(),
+      changeCount: z.number(),
+    }).optional(),
+    timestamp: z.number(),
+  }),
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

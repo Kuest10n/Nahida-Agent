@@ -21,6 +21,13 @@ const INVOKE_CHANNELS = new Set<string>([
   IpcChannel.EXPORT_CONVERSATION,
   IpcChannel.IMAGE_UPLOAD,
   IpcChannel.VISION_ANALYZE,
+  IpcChannel.SCREENSHOT_REGION_RESULT,
+  IpcChannel.SCREENSHOT_REGION_CANCEL,
+  IpcChannel.VIDEO_UPLOAD,
+  // v2.16: 屏幕实时监控
+  IpcChannel.MONITOR_START,
+  IpcChannel.MONITOR_STOP,
+  IpcChannel.MONITOR_STATE,
 ]);
 
 // 渲染层能监听的通道（main → renderer 单向推）
@@ -32,6 +39,12 @@ const LISTEN_CHANNELS = new Set<string>([
   IpcChannel.TTS_CHUNK,
   IpcChannel.RAND_ERROR_REPORT,
   IpcChannel.VISION_RESULT,
+  IpcChannel.SCREENSHOT_REGION_START,
+  IpcChannel.VIDEO_RESULT,
+  // v2.16: 屏幕实时监控帧差事件
+  IpcChannel.MONITOR_FRAME,
+  // v3.0: 反馈窗口打开事件
+  IpcChannel.FEEDBACK_OPEN,
 ]);
 
 // 给渲染层暴露的 API

@@ -372,9 +372,11 @@ export async function broadcastMessage(
   }
 }
 
+const CHINESE_CHAR_RE = /[\u4e00-\u9fa5]/g;
+
 export function countTokens(text: string): number {
-  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const otherChars = text.replace(/[\u4e00-\u9fa5]/g, '').length;
+  const chineseChars = (text.match(CHINESE_CHAR_RE) || []).length;
+  const otherChars = text.replace(CHINESE_CHAR_RE, '').length;
   return chineseChars + Math.ceil(otherChars / 4);
 }
 

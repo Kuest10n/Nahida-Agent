@@ -86,14 +86,21 @@ const MAX_HISTORY_TURNS = 10;
 /** T9: 工具调用标签正则（prompt-based 方案，不依赖 ollama function calling） */
 const TOOL_CALL_REGEX = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/;
 
-/** T9: 工具调用提示（拼到 system prompt 末尾，告诉 LLM 如何调用工具） */
-const TOOL_CALL_PROMPT = `
+/**
+ * T9: 工具调用提示（拼到 system prompt 末尾，告诉 LLM 如何调用工具）
+ *
+ * 改为函数：在调用时才读取 listToolNames()，避免模块加载时工具尚未注册导致列表为空。
+ */
+function buildToolCallPrompt(): string {
+  const toolNames = listToolNames().join(', ') || '（暂无工具）';
+  return `
 ## 工具调用规则
 当需要调用工具时，在回复中输出以下标签（不要输出其他内容）：
 <tool_call>{"name":"工具名","arguments":{...参数...}}</tool_call>
 
-可用工具：${listToolNames().join(', ') || '（暂无工具）'}
+可用工具：${toolNames}
 调用后我会把结果告诉你，你再生成最终回复。`;
+}
 
 function getSystemPrompt(): string {
   const personalityId = getCurrentPersonalityId();
@@ -102,10 +109,17 @@ function getSystemPrompt(): string {
 
   let basePrompt = '';
 
-  if (fs.existsSync(sohaPath)) {
+  // 尝试缓存命中（避免每次对话都读盘+逐行解析）
+  const cached = getCachedBasePrompt(personalityId, sohaPath);
+  if (cached !== null) {
+    basePrompt = cached;
+  } else if (fs.existsSync(sohaPath)) {
+    const stat = fs.statSync(sohaPath);
     const content = fs.readFileSync(sohaPath, 'utf-8').trim();
     if (content) {
       basePrompt = extractCoreRules(content);
+      // 缓存提取结果（mtime 变化时自动失效）
+      setPromptCache(personalityId, sohaPath, stat.mtimeMs, basePrompt);
     }
   }
 
@@ -117,7 +131,7 @@ function getSystemPrompt(): string {
     }
   }
 
-  // 注入成熟度参数（L3 时间感与数字衰老）
+  // 注入成熟度参数（L3 时间感与数字衰老）—— 动态部分，不缓存
   const maturityPrompt = getMaturityPrompt();
   return `${maturityPrompt}\n\n${basePrompt}`;
 }
@@ -358,7 +372,7 @@ export async function generateResponse(
 
     // 工具提示（priority=90，低于常驻但高于按需分片）
     if (intent === 'tool' && router) {
-      blocks.push({ tag: 'tool', content: TOOL_CALL_PROMPT, priority: 90 });
+      blocks.push({ tag: 'tool', content: buildToolCallPrompt(), priority: 90 });
     }
 
     // 按 budget 裁剪（总 ceiling 3000t，worldbook 800t，shard 600t）
@@ -602,7 +616,35 @@ export async function warmupModel(): Promise<void> {
   }
 }
 
-// ── System Prompt 构建 ────────────────────────────────────────
+// ── System Prompt 缓存 ───────────────────────────────────────
+
+interface PromptCache {
+  personalityId: string;
+  filePath: string;
+  mtimeMs: number;
+  basePrompt: string;
+}
+
+let promptCache: PromptCache | null = null;
+
+/** 从 SOHA.md 提取核心规则，带 mtime 缓存（避免每次对话都读盘+解析） */
+function getCachedBasePrompt(personalityId: string, sohaPath: string): string | null {
+  if (promptCache && promptCache.personalityId === personalityId && promptCache.filePath === sohaPath) {
+    try {
+      const stat = fs.statSync(sohaPath);
+      if (stat.mtimeMs === promptCache.mtimeMs) {
+        return promptCache.basePrompt;
+      }
+    } catch {
+      // stat 失败则回退到重新读取
+    }
+  }
+  return null;
+}
+
+function setPromptCache(personalityId: string, filePath: string, mtimeMs: number, basePrompt: string): void {
+  promptCache = { personalityId, filePath, mtimeMs, basePrompt };
+}
 
 /**
  * 格式化记忆分片为 system prompt 段落

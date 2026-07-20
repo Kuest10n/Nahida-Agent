@@ -77,6 +77,11 @@ const MAX_DAILY_STATS = 30;
 
 let data: TokenUsageData;
 let initialized = false;
+/** 写盘 debounce 定时器，避免每次对话都同步 IO */
+let saveTimer: NodeJS.Timeout | null = null;
+/** 缓存今日的 dailyStats 引用，避免每次都 find() */
+let cachedToday: DailyStats | null = null;
+let cachedTodayStr = '';
 
 // ── 核心逻辑 ──────────────────────────────────────────────────
 
@@ -95,6 +100,42 @@ function createDefaultData(): TokenUsageData {
 /** 获取今日日期字符串 */
 function getTodayStr(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * 获取今日的 dailyStats 引用（带缓存）
+ *
+ * 优化：避免每次 recordTokenUsage 都 O(n) find()
+ */
+function getTodayStats(): DailyStats {
+  const today = getTodayStr();
+
+  // 缓存命中：日期未变且引用有效
+  if (today === cachedTodayStr && cachedToday) {
+    return cachedToday;
+  }
+
+  // 缓存失效：查找或创建
+  let daily = data.dailyStats.find(d => d.date === today);
+  if (!daily) {
+    daily = {
+      date: today,
+      totalTokens: 0,
+      conversationCount: 0,
+      modelUsage: {},
+      avgLatencyMs: 0,
+      totalLatencyMs: 0,
+    };
+    data.dailyStats.push(daily);
+    // 只保留最近 30 天
+    if (data.dailyStats.length > MAX_DAILY_STATS) {
+      data.dailyStats.shift();
+    }
+  }
+
+  cachedToday = daily;
+  cachedTodayStr = today;
+  return daily;
 }
 
 /** 初始化（启动时调用一次） */
@@ -135,30 +176,14 @@ export function recordTokenUsage(record: TokenRecord): void {
   data.currentSessionTokens += record.totalTokens;
   data.currentSessionConversations++;
 
-  // 更新日统计
-  const today = getTodayStr();
-  let daily = data.dailyStats.find(d => d.date === today);
-  if (!daily) {
-    daily = {
-      date: today,
-      totalTokens: 0,
-      conversationCount: 0,
-      modelUsage: {},
-      avgLatencyMs: 0,
-      totalLatencyMs: 0,
-    };
-    data.dailyStats.push(daily);
-    // 只保留最近 30 天
-    if (data.dailyStats.length > MAX_DAILY_STATS) {
-      data.dailyStats.shift();
-    }
-  }
-
+  // 更新日统计（使用缓存，O(1)）
+  const daily = getTodayStats();
   daily.totalTokens += record.totalTokens;
   daily.conversationCount++;
   daily.modelUsage[record.model] = (daily.modelUsage[record.model] ?? 0) + record.totalTokens;
 
-  saveData();
+  // debounce 写盘（2 秒，token 统计对实时性要求不高）
+  scheduleSave();
 }
 
 /** 带延迟的记录（推荐用法） */
@@ -168,8 +193,7 @@ export function recordTokenUsageWithLatency(
   promptTokens: number,
   completionTokens: number,
   latencyMs: number,
-  tier?: string,
-): void {
+  tier?: string,): void {
   recordTokenUsage({
     sessionId,
     model,
@@ -180,16 +204,22 @@ export function recordTokenUsageWithLatency(
     tier,
   });
 
-  // 更新日延迟统计
-  const today = getTodayStr();
-  const daily = data.dailyStats.find(d => d.date === today);
-  if (daily) {
-    daily.totalLatencyMs += latencyMs;
-    daily.avgLatencyMs = Math.round(daily.totalLatencyMs / daily.conversationCount);
-  }
+  // 更新日延迟统计（使用缓存，O(1)）
+  const daily = getTodayStats();
+  daily.totalLatencyMs += latencyMs;
+  daily.avgLatencyMs = Math.round(daily.totalLatencyMs / daily.conversationCount);
 }
 
-/** 保存到磁盘 */
+/** debounce 调度写盘 */
+function scheduleSave(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveData();
+  }, 2000);
+}
+
+/** 保存到磁盘（原子写） */
 function saveData(): void {
   try {
     const dir = path.dirname(DATA_FILE);
@@ -303,9 +333,28 @@ export function resetCurrentSession(): void {
   data.currentSessionConversations = 0;
 }
 
+/**
+ * 立即将内存中的统计数据刷到磁盘
+ *
+ * 在应用退出时调用，防止 debounce 中的数据丢失。
+ */
+export function flushTokenUsage(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    saveData();
+  }
+}
+
 /** 重置全部（测试用） */
 export function resetTokenUsage(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
   data = createDefaultData();
+  cachedToday = null;
+  cachedTodayStr = '';
   saveData();
   console.log('[TokenUsage] reset');
 }

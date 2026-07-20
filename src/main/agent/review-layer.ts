@@ -59,6 +59,13 @@ export function setReviewEnabled(enabled: boolean): void {
 // 不是 OOC；只有 "稍等一下" 这种客服腔前缀才算 OOC
 const OOC_RE = /作为AI|我是人工智能|客服腔|以全知自居|好的呢[～~]|稍等一下|根据我的训练数据|基于我的知识库/;
 
+// 预编译常用正则（避免重复编译）
+const ACTION_BRACKET_RE = /（[^）]+）\s*$/;
+const ACTION_BRACKET_CAPTURE_RE = /（([^）]+)）\s*$/;
+const JSON_EXTRACT_RE = /^[\s\S]*?(\{[\s\S]*\})/;
+const COT_KEYWORDS_RE = /路径|步骤|拆|分|梳理|分析/;
+const LOGIC_MARKERS_RE = /→|因此|所以|首先|其次|最后|综上/;
+
 // ── 类型定义（保持与 handlers.ts 兼容） ────────────────────────
 
 export interface IntentReview {
@@ -134,7 +141,7 @@ function normalizeReviewJson(
   opts?: ReviewOpts,
 ): DimResult {
   // 剥前缀容错：截取第一个 { 到最后一个 }
-  const cleaned = raw.replace(/^[\s\S]*?(\{[\s\S]*\})/, '$1').trim();
+  const cleaned = raw.replace(JSON_EXTRACT_RE, '$1').trim();
 
   try {
     const parsed = JSON.parse(cleaned);
@@ -202,10 +209,10 @@ function ruleFallback(
 
     case 'B': {
       // B 维：末句动作括号检测（全角中文括号）
-      const hasBracket = /（[^）]+）\s*$/.test(sentence.trim());
+      const hasBracket = ACTION_BRACKET_RE.test(sentence.trim());
       // /think 档下检查 CoT 结构
       if (opts?.routeTier === 'think') {
-        const hasCoT = /路径|步骤|拆|分|梳理|分析/.test(sentence);
+        const hasCoT = COT_KEYWORDS_RE.test(sentence);
         if (!hasCoT && !hasBracket) return { ok: false, issue: '敷衍' };
         if (!hasCoT) return { ok: false, issue: '漏CoT' };
       }
@@ -214,7 +221,7 @@ function ruleFallback(
 
     case 'C': {
       // C 维：抽末句括号内的动作 tag → 用 ACTION_TAG_TO_ENUM 反查情绪
-      const match = sentence.match(/（([^）]+)）\s*$/);
+      const match = sentence.match(ACTION_BRACKET_CAPTURE_RE);
       const tag = match?.[1] ?? '';
       // 复用 emotion.ts 中央映射表，避免维护两套关键词正则
       const actionEnum = tag ? resolveActionEmotion(tag) : undefined;
@@ -465,7 +472,7 @@ export class ReviewLayer {
     // ── 心动检测（Heartjump）──
     // 在 C 维后调用，检测"违背逻辑、违背习惯、但符合人格"的瞬间
     const emotionEnum: NahidaEmotion = cResult.tag ? resolveCnEmotion(cResult.tag) : NahidaEmotion.Greeting;
-    const actionMatch = assistantOutput.match(/（([^）]+)）\s*$/);
+    const actionMatch = assistantOutput.match(ACTION_BRACKET_CAPTURE_RE);
     const actionTag = actionMatch?.[1] ?? '';
     const heartjump = detectHeartjump(userMessage, assistantOutput, emotionEnum, actionTag);
 
@@ -525,12 +532,7 @@ export class ReviewLayer {
    * @returns 检查结果
    */
   private checkCoTStructure(output: string): { pass: boolean; reason?: string } {
-    // CoT 关键词（来自 ruleFallback B 维）
-    const cotKeywords = /路径|步骤|拆|分|梳理|分析/;
-    // 逻辑推导标记
-    const logicMarkers = /→|因此|所以|首先|其次|最后|综上/;
-
-    const hasCoT = cotKeywords.test(output) || logicMarkers.test(output);
+    const hasCoT = COT_KEYWORDS_RE.test(output) || LOGIC_MARKERS_RE.test(output);
 
     if (!hasCoT) {
       return {
@@ -559,7 +561,7 @@ export class ReviewLayer {
 
   /** B 维 DimResult → OutputReview */
   private mapOutput(r: DimResult, sentence: string): OutputReview {
-    const hasBracket = /（[^）]+）\s*$/.test(sentence.trim());
+    const hasBracket = ACTION_BRACKET_RE.test(sentence.trim());
     // 修复：原 `r.fail === 'A'` 永远 false（B 维只输出 fail:'B'）
     // 改用 OOC_RE 直接重判，保证 A 维 OOC 在 B 维 score 也反映
     const hasForbidden = OOC_RE.test(sentence);
@@ -596,7 +598,7 @@ export class ReviewLayer {
    */
   private mapEmotion(r: DimResult, sentence: string): EmotionReview {
     const cnTag = r.tag ?? '';
-    const actionMatch = sentence.match(/（([^）]+)）\s*$/);
+    const actionMatch = sentence.match(ACTION_BRACKET_CAPTURE_RE);
     const actionTag = actionMatch?.[1] ?? '';
 
     // 用中央枚举判情绪与动作是否匹配

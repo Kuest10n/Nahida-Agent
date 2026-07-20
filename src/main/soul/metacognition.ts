@@ -58,9 +58,8 @@ export function analyze(text: string, modelName: string): MetacognitionResult {
 
   // 2. 大量模糊词 → 不确定
   const hedgeCount = HEDGES.reduce((count, word) => {
-    const regex = new RegExp(word, 'g');
-    const matches = text.match(regex);
-    return count + (matches ? matches.length : 0);
+    // split 比 new RegExp 更快，且无正则特殊字符风险
+    return count + (text.split(word).length - 1);
   }, 0);
   if (hedgeCount >= 3) {
     confidence -= 0.2;
@@ -69,9 +68,7 @@ export function analyze(text: string, modelName: string): MetacognitionResult {
 
   // 3. 自相矛盾信号
   const contraCount = CONTRADICTIONS.reduce((count, word) => {
-    const regex = new RegExp(word, 'g');
-    const matches = text.match(regex);
-    return count + (matches ? matches.length : 0);
+    return count + (text.split(word).length - 1);
   }, 0);
   if (contraCount >= 2) {
     confidence -= 0.25;

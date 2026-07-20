@@ -7,9 +7,10 @@
 ### 核心能力
 - **三重模型路由**：本地（Qwen3-8B）→ 云端标准（DeepSeek V4pro）→ 云端快速（DeepSeek Flash），基于消息复杂度自动择模
 - **四审层质量保障**：意图审查（A）+ 输出审查（B）+ 情绪审查（C）+ 工具调用审查（D），确保人设一致性
+- **视觉感知闭环**：图片上传 + 全屏/区域/多屏截图 + OCR 识别 + 屏幕实时监控 + 视频帧抽取 + LRU 缓存
 - **Live2D 动态形象**：Cubism 4.0 模型 + 透明漂浮窗 + 动作映射 + 口型同步
 - **TTS 语音合成**：GPT-SoVITS 纳西妲专属音色 + edge-tts 备用 + RVC AI 翻唱
-- **记忆系统**：9 分片结构（SOHA/User/fact/worldbook/persona/emotion/skill/reflect/interest）+ 向量召回
+- **记忆系统**：9 分片结构（SOHA/User/fact/worldbook/persona/emotion/skill/reflect/interest）+ worldbook trigger 召回
 - **工具调用**：7 个内置工具（clock/web_fetch/search/translate/weather/file_read/file_write）+ MCP 扩展
 - **多 API 动态择模**：支持 ollama 本地 + DeepSeek 云端双端点，优先级路由 + 健康检查 + 熔断机制
 - **托盘集成**：系统托盘图标 + 全局快捷键（Ctrl+Space）+ 开机自启 + 状态联动
@@ -39,30 +40,34 @@
 e:\Nahida agent\
 ├── src/
 │   ├── main/              # 主进程
-│   │   ├── agent/         # Agent 编排（agent-core + review-layer + model-selector）
+│   │   ├── agent/         # Agent 编排（agent-core + review-layer + multi-agent）
 │   │   ├── config/        # 配置系统（config.ts）
-│   │   ├── ipc/           # IPC 处理（handlers.ts）
-│   │   ├── memory/        # 记忆系统（session-store + embedding + vector-store + personality-manager）
-│   │   ├── mcp/           # MCP 框架（email/qq/wechat server）
+│   │   ├── ipc/           # IPC 处理（handlers.ts + validate.ts）
+│   │   ├── memory/        # 记忆系统（session-store + shards + worldbook + personality-manager）
+│   │   ├── mcp/           # MCP 框架（email/qq/wechat server + client）
 │   │   ├── perception/    # 感知层（scanner + hardware + alert）
 │   │   ├── router/        # 路由层（router + degrade-strategy）
-│   │   ├── safety/        # 安全层（instruction-guard + guardrails）
-│   │   ├── tools/         # 工具注册（builtin + registry + calendar + alarm）
-│   │   ├── tray/          # 托盘管理（tray-manager）
-│   │   └── tts/           # TTS 调度（gpt-sovits-adapter + edge-tts-adapter + scheduler）
+│   │   ├── safety/        # 安全层（guardrails）
+│   │   ├── tools/         # 工具注册（builtin + registry + calendar + alarm + pomodoro）
+│   │   ├── tray/          # 托盘管理（tray-manager + autostart + shortcuts）
+│   │   ├── tts/           # TTS 调度（gpt-sovits-adapter + edge-tts-adapter + scheduler + voice-cache）
+│   │   ├── vision/        # 视觉感知（vision-manager + ocr-* + screen-monitor + video-frame）
+│   │   ├── voice/         # 语音输入（stt + voice-wakeup + whisper-adapter）
+│   │   └── soul/          # 灵魂模块（dream + forgetting + metacognition + reset + persona-ab）
 │   ├── preload/           # preload 脚本（contextBridge 暴露 IPC）
 │   ├── renderer/          # 渲染层
 │   │   ├── live2d/        # Live2D 渲染（manager + action-map）
-│   │   └── main/          # 主聊天界面（ChatPanel）
-│   └── shared/            # 共享类型（ipc-channels + emotion）
+│   │   ├── main/          # 主聊天界面（ChatPanel + MessageList + InputBar + SettingsModal）
+│   │   └── capture-overlay/ # 截图选区 UI
+│   └── shared/            # 共享类型（config + emotion + ipc + global）
 ├── assets/                # 资源文件
-│   ├── models/nahida/     # Live2D 模型
 │   ├── tray/              # 托盘图标（3 状态）
-│   └── rvc/               # RVC 模型（AI 翻唱）
-├── memory/                # 记忆分片（9 文件 + personalities）
+│   └── live2dcubismcore.min.js # Live2D Cubism 4.0 SDK
+├── memory/                # 记忆分片（9 文件 + personalities + worldbook）
 ├── modelfiles/            # Ollama Modelfile
-├── tests/                 # 测试用例
-└── .trae/rules/           # Trae 规则（agent-main + renderer + skills + versioning）
+├── docs/train-logs/       # 训练日志归档
+├── src/test/              # 测试用例
+└── .trae/rules/           # Trae 规则（agent-main + renderer + skills + versioning + memory）
 ```
 
 ## 快速开始
@@ -184,7 +189,7 @@ MIT License - 详见 [LICENSE](./LICENSE)
 
 ## 相关链接
 
-- [原神 - 纳西妲](https://genshin.hoyoverse.com/zh-cn/character/liyue?char=18)
+- [原神 - 纳西妲](https://genshin.hoyoverse.com/en/character/sumeru?char=6)
 - [Ollama](https://ollama.com/)
 - [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)
 - [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display)

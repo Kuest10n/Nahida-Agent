@@ -506,6 +506,1097 @@
 
 ---
 
+### v2.6.0 - 2026-07-18
+
+**里程碑：渲染层图片上传 UI——让"看"的能力触手可及**
+
+v2.5.0 在主进程铺好了 vision 输入通路，但渲染层只有文本输入框，用户无法实际发图。v2.6.0 补齐这条"最后一公里"，让纳西妲能"看见"成为日常交互。
+
+- **图片附件类型**（[renderer/main/types.ts](file:///e:/Nahida%20agent/src/renderer/main/types.ts)）
+  - 新增 `ImageAttachment` 接口（id / dataUrl / base64 / mimeType / filename / source）
+  - `Message` 接口新增 `images?: ImageAttachment[]` 字段
+  - 新增 `generateImageId()` 工具函数
+
+- **InputBar 多模态改造**（[renderer/main/InputBar.tsx](file:///e:/Nahida%20agent/src/renderer/main/InputBar.tsx)）
+  - 📎 圆形按钮 + 隐藏 `<input type="file" multiple>` 文件选择
+  - 拖拽：`onDragOver` / `onDragLeave` / `onDrop` 三事件 + 半透明绿色遮罩提示
+  - 粘贴：`onPaste` 监听剪贴板 `image/*` 项，支持截图直接贴入
+  - 待发送缩略图条：64×64 圆角缩略图 + 来源徽标（文件/剪贴板/拖拽）+ × 移除按钮
+  - 前置校验：MIME 类型白名单（PNG/JPEG/WebP/GIF）+ 10MB 大小限制
+  - 错误提示条：红色背景条显示具体原因
+  - 发送：文本与图片可同时或单独发送，文本可为空（默认"请描述这张图片的内容"）
+
+- **MessageBubble 图片渲染**（[renderer/main/MessageBubble.tsx](file:///e:/Nahida%20agent/src/renderer/main/MessageBubble.tsx)）
+  - 用户消息支持渲染附带图片缩略图（120×120 圆角）
+  - 悬停放大动画（scale 1.03 + 阴影）
+  - 点击缩略图 → 全屏黑色遮罩 + 居中大图预览 + 文件名底栏 + × 关闭按钮
+  - 点击遮罩空白处关闭预览
+
+- **ChatPanel 多模态发送**（[renderer/main/ChatPanel.tsx](file:///e:/Nahida%20agent/src/renderer/main/ChatPanel.tsx)）
+  - `handleSend(content, images?)` 新签名，向下兼容
+  - images 非空时调用 `agent:chat` 携带 `images: base64[]` 字段
+  - 主进程 agent:chat handler 在 `payload.images` 非空时自动走 vision 路径（v2.5.0 已铺好）
+  - 用户消息持久化时包含图片缩略图（渲染层本地状态，不污染持久层）
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.6.0 清单**：
+- ✅ ImageAttachment 类型定义
+- ✅ InputBar 📎按钮 / 拖拽 / 粘贴 / 缩略图条
+- ✅ MessageBubble 图片渲染 + 点击放大预览
+- ✅ ChatPanel handleSend 多模态支持
+- ✅ 复用 v2.5.0 后端 vision 路径（无后端改动）
+
+**交互说明**：
+1. 点击 📎 按钮选择图片 / 截图后 Ctrl+V 粘贴 / 直接把图片文件拖到输入栏
+2. 缩略图条显示待发送图片，可单独移除
+3. 输入框可空（默认提示词"请描述这张图片的内容"），也可附加说明
+4. 发送后用户消息气泡显示图片缩略图，点击可放大
+5. 纳西妲用 vision 模型分析后流式回复（与普通对话一致的 TTS + Live2D 联动）
+
+- 状态：v2.6.0 已封板
+- 下一步：v2.7+ OCR 实装（PaddleOCR / Tesseract.js）+ 视觉感知深度（多图关联、视频帧抽取、屏幕截图）
+
+---
+
+### v2.7.0 - 2026-07-18
+
+**里程碑：OCR 实装——让纳西妲能"读"图中的字**
+
+v2.5.0 留了 OCR 预留口，v2.6.0 让用户能上传图片，v2.7.0 把 OCR 真正实装，让纳西妲不仅能"看"图，还能"读"出图中的文字（截图、文档、表格、聊天记录等）。
+
+- **Tesseract.js 集成**（[vision/vision-manager.ts](file:///e:/Nahida%20agent/src/main/vision/vision-manager.ts)）
+  - 新增依赖：`tesseract.js`（纯 JS OCR 库，wasm + worker thread，无 Python 依赖）
+  - `runOCR()` 从 stub 替换为真实实现：动态 import → createWorker → recognize → terminate
+  - 支持语言代码：`chi_sim` 简中 / `chi_tra` 繁中 / `eng` 英文 / `jpn` 日文 / `kor` 韩文
+  - 多语言用 `+` 连接，默认 `chi_sim+eng`（中英混合识别）
+  - 首次调用自动下载语言包（缓存在 node_modules/tesseract.js/）
+  - 30 秒超时保护（防 worker 卡死），100ms debounce（防 worker 抢占）
+  - 显式 terminate（防 worker 线程泄漏）
+
+- **VisionConfig 扩展**（[shared/types/config.ts](file:///e:/Nahida%20agent/src/shared/types/config.ts)）
+  - 新增 `ocrLanguage?: string` 字段（Tesseract 语言代码）
+  - `ocrEnginePath` 标注弃用（保留字段向后兼容）
+
+- **OCR 流程集成**
+  - 复用 v2.5.0 已铺好的流程：`processVisionRequest` 在 `ocrEnabled` 为 true 时自动并行 OCR 所有图片
+  - OCR 结果通过 `VisionAnalysisResult.ocrText` 返回，渲染层可单独显示
+  - vision 模型负责图像理解，Tesseract.js 负责精确文字识别，两者互补
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.7.0 清单**：
+- ✅ tesseract.js 依赖安装
+- ✅ runOCR 实装（createWorker / recognize / terminate）
+- ✅ 30s 超时 + 100ms debounce 防护
+- ✅ VisionConfig.ocrLanguage 字段
+- ✅ 复用 v2.5.0 processVisionRequest 流程
+
+**设计说明**：
+- **为何选 Tesseract.js 而非 PaddleOCR**：纯 JS 无 Python 依赖，与项目 Electron + TS 栈一致；wasm + worker 不阻塞主进程；首次下载语言包后离线可用
+- **OCR 与 vision 模型分工**：vision 模型（qwen2-vl）擅长"看懂"图像语义，OCR 擅长精确逐字识别。两者互补——OCR 提供准确文字，vision 模型提供上下文理解
+- **未启用时零开销**：`ocrEnabled` 为 false 时直接返回空字符串，不加载 wasm；动态 import 确保未启用时无性能损失
+
+- 状态：v2.7.0 已封板
+- 下一步：v2.8+ 视觉感知深度（多图关联 / 视频帧抽取 / 屏幕截图）+ OCR 后处理（拼写校正 / 表格结构化）
+
+---
+
+### v2.7.1 - 2026-07-18
+
+**优化：OCR 准确度提升——PNG 灰度化预处理**
+
+用户反馈 Tesseract.js 直接识别彩色图片准确度不足。OCR 标准预处理流程中，灰度化能显著提升识别率，本次补齐这一步。
+
+- **PNG 灰度化预处理**（[vision/vision-manager.ts](file:///e:/Nahida%20agent/src/main/vision/vision-manager.ts)）
+  - 新增 `pngjs` 依赖（纯 JS PNG 编解码，无 native 依赖）
+  - 新增 `grayscalePng(buf)` 函数：PNG.sync.read → RGBA 像素灰度化 → PNG.sync.write
+  - 灰度化算法：ITU-R BT.601 加权平均 `Y = 0.299R + 0.587G + 0.114B`（人眼对绿色更敏感）
+  - 仅改 RGB 三通道，alpha 通道保持不变
+  - runOCR 在调用 Tesseract 前判断 `isPng(buf)`，PNG 自动走灰度化路径
+  - JPEG/WebP/GIF 保持原样（让 Tesseract 内部处理）
+
+- **错误容错**
+  - 灰度化失败（PNG 损坏 / 解码异常）时返回原始 buffer，不阻塞 OCR
+  - 动态 import pngjs，未启用 OCR 时零开销
+  - console.warn 记录失败原因便于排查
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**为什么灰度化能提升 OCR 准确度**：
+1. 消除色彩干扰，Tesseract 聚焦于文字边缘对比度
+2. 减少颜色噪声（如背景色块、水印），提升内部二值化效果
+3. 文档/截图场景下文字与背景的灰度差异更稳定
+4. Tesseract 内部本来就会做灰度化，但前置处理能避免编解码损失
+
+**为什么仅处理 PNG**：
+- 截图（最常见 OCR 场景）默认是 PNG
+- PNG 无损，灰度化后重新编码不会引入压缩伪影
+- JPEG 是有损格式，反复编解码会降低质量；让 Tesseract 内部处理更稳妥
+- WebP/GIF 使用场景较少，暂不处理
+
+- 状态：v2.7.1 已封板
+- 下一步：v2.8+ 视觉感知深度 + OCR 后处理（拼写校正 / 表格结构化）
+
+---
+
+### v2.8.0 - 2026-07-18
+
+**里程碑：屏幕截图工具——让纳西妲主动"看"屏幕**
+
+v2.5–v2.7 让纳西妲能"看"用户上传的图片，但本质仍是被动接受。v2.8.0 赋予纳西妲主动观察屏幕的能力——这是从"工具"到"陪伴 Agent"的本质飞跃。
+
+- **截屏模块**（[vision/screenshot.ts](file:///e:/Nahida%20agent/src/main/vision/screenshot.ts)）
+  - 基于 Electron `desktopCapturer` 内置 API，无额外依赖
+  - `captureScreen(options)` — 截取指定显示器（默认主屏），返回 base64 + 路径
+  - `captureAllDisplays()` — 截取所有显示器（多屏场景）
+  - `captureAndAnalyze(prompt, onDelta)` — 截屏 + vision 分析一站式流程
+  - `listDisplays()` — 列出所有可用显示器（id / label / bounds）
+  - `formatDisplayList()` — 格式化显示器列表（命令输出用）
+
+- **隐私与存储设计**
+  - 截图存 `data/screenshots/`（与 `data/media/` 隔离，不污染用户上传）
+  - 30 分钟自动清理过期截图（防磁盘堆积）
+  - 截图操作记录到 console 日志（用户可审计）
+  - 完全本地操作，不上传任何远程服务
+
+- **`/screenshot` 命令**（[router/router.ts](file:///e:/Nahida%20agent/src/main/router/router.ts) + [ipc/handlers.ts](file:///e:/Nahida%20agent/src/main/ipc/handlers.ts)）
+  - `/screenshot` — 截主屏 + 默认提问"请描述这张截图的内容"
+  - `/screenshot list` — 列出所有可用显示器
+  - `/screenshot <显示器ID>` — 截指定显示器
+  - `/screenshot 看看这个报错` — 截主屏 + 自定义提问（纳西妲按用户意图分析）
+  - 流式推送 vision 分析结果（与 v2.5.0 路径一致）
+  - 自动联动 TTS + Live2D 动作
+
+- **PNG 尺寸读取**
+  - 纯 JS 读 PNG IHDR 头部（offset 16/20 读 UInt32BE），无 canvas/sharp 依赖
+  - 用于记录截图实际尺寸
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.8.0 清单**：
+- ✅ screenshot.ts 模块（captureScreen / captureAllDisplays / captureAndAnalyze）
+- ✅ 30 分钟自动清理 + console 审计日志
+- ✅ /screenshot 命令四种子模式
+- ✅ 多显示器支持（list + 指定 ID）
+- ✅ 流式 vision 分析 + TTS + Live2D 联动
+- ✅ 截图持久化（与用户上传 media 隔离）
+
+**设计亮点**：
+1. **主动 vs 被动**：从"用户上传图片"到"纳西妲自己看屏幕"，是 Agent 自主性的关键一步
+2. **复用现有管线**：截图后自动走 v2.5.0 processVisionRequest，无需重复实现 vision 流程
+3. **隐私优先**：截图本地存储 + 30 分钟自动清理 + 不上传远程
+4. **多屏支持**：listDisplays 列出所有显示器，可指定 ID 截取
+5. **自然语言提问**：`/screenshot 看看这个报错` 让用户能用自然语言引导纳西妲的注意力
+
+**使用场景**：
+- "看看我屏幕上这个报错什么意思" → `/screenshot 看看这个报错什么意思`
+- "翻译屏幕上这段文字" → `/screenshot 帮我翻译屏幕上的文字`
+- "分析下这个表格的数据" → `/screenshot 分析下这个表格的数据`
+- 多显示器：`/screenshot list` → `/screenshot 1234567890`
+
+- 状态：v2.8.0 已封板
+- 下一步：v2.9+ OCR 后处理（拼写校正 / 表格结构化）+ 区域截图 UI（渲染层选区）+ 视频帧抽取
+
+---
+
+### v2.9.0 - 2026-07-18
+
+**里程碑：区域截图 UI——从"全屏"到"精准框选"**
+
+v2.8.0 的 `/screenshot` 只能截全屏，对于大屏显示器来说太粗暴——用户往往只想分析屏幕上某个局部（一个报错框、一段文字、一个表格）。v2.9.0 引入区域截图 UI，类似 QQ 截图 / Snipaste 的体验。
+
+- **区域截图覆盖窗口**（[vision/capture-overlay.ts](file:///e:/Nahida%20agent/src/main/vision/capture-overlay.ts)）
+  - 全屏透明覆盖窗口（`frame:false, transparent:true, alwaysOnTop:true`）
+  - `showRegionOverlay()` 返回 Promise，await 拿到选区坐标
+  - `registerRegionOverlayHandlers()` 注册 `screenshot:region-result` / `screenshot:region-cancel` IPC 监听
+  - 用户按 ESC 或点取消按钮 → resolve(null)
+
+- **选区 UI**（[renderer/capture-overlay/index.html](file:///e:/Nahida%20agent/src/renderer/capture-overlay/index.html)）
+  - 纯 JS + CSS，不引入 React（轻量，启动快）
+  - 半透明黑色遮罩（`rgba(0,0,0,0.35)`）+ 绿色选区边框（`#66bb6a`，与项目主题一致）
+  - 鼠标拖拽画矩形，实时显示物理像素尺寸标签（如 `1920 × 1080`）
+  - 选区完成后右下角显示工具栏（确认 / 取消按钮）
+  - ESC 键全局监听取消
+  - 设备像素比（DPR）转换：CSS 像素 → 物理像素
+
+- **PNG 裁剪**（[vision/screenshot.ts](file:///e:/Nahida%20agent/src/main/vision/screenshot.ts)）
+  - `captureRegion(region, displayId?)` — 截全屏后用 pngjs 按选区裁剪
+  - `PNG.bitblt` 像素级拷贝（高性能，无 canvas 依赖）
+  - 越界保护：选区超出图像边界时自动截断
+  - 裁剪后单独存 `data/screenshots/xxx_region.png`
+
+- **IPC 通道扩展**（[shared/types/ipc.ts](file:///e:/Nahida%20agent/src/shared/types/ipc.ts)）
+  - `SCREENSHOT_REGION_START` — main → overlay，启动选区（含 screenWidth/height/DPR）
+  - `SCREENSHOT_REGION_RESULT` — overlay → main，回传选区坐标
+  - `SCREENSHOT_REGION_CANCEL` — overlay → main，用户取消
+  - preload 白名单同步更新
+
+- **`/screenshot region` 命令**（[ipc/handlers.ts](file:///e:/Nahida%20agent/src/main/ipc/handlers.ts)）
+  - 用户输入 → 显示覆盖窗口 → await 选区 → captureRegion 裁剪 → vision 分析 → TTS + Live2D 联动
+  - 用户取消时返回温柔的提示消息
+
+- **Vite 多入口扩展**（[vite.renderer.config.ts](file:///e:/Nahida%20agent/vite.renderer.config.ts)）
+  - 新增 `capture-overlay` 入口
+  - dev 模式：`http://localhost:5173/capture-overlay/index.html`
+  - 生产模式：`dist/renderer/capture-overlay/index.html`
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.9.0 清单**：
+- ✅ capture-overlay.ts 覆盖窗口管理器
+- ✅ capture-overlay/index.html 选区 UI（纯 JS）
+- ✅ screenshot.ts captureRegion() PNG 裁剪
+- ✅ 3 个新 IPC 通道 + preload 白名单
+- ✅ /screenshot region 命令
+- ✅ vite 多入口配置
+- ✅ 选区尺寸标签 + ESC 取消 + 工具栏确认/取消
+
+**设计亮点**：
+1. **纯 JS 不引 React**：覆盖窗口只做选区这一件事，纯 JS + CSS 启动更快，不占 React bundle
+2. **DPR 坐标转换**：高 DPI 屏（如 2x Retina）下正确处理 CSS 像素 → 物理像素
+3. **Promise 化 API**：`showRegionOverlay()` 返回 Promise，调用方 `await` 拿坐标，代码直观
+4. **复用 pngjs**：裁剪复用 v2.7.1 的 pngjs，无新依赖
+5. **主题一致**：选区边框用 `#66bb6a`（项目草绿色），尺寸标签同色
+
+**使用方式**：
+1. 输入 `/screenshot region`
+2. 屏幕变暗，鼠标变十字光标
+3. 拖动鼠标框选要分析的区域
+4. 松开鼠标 → 选区下方出现"确认/取消"工具栏
+5. 点确认 → 纳西妲分析选区内容并流式回复
+6. 点取消或按 ESC → 取消截图
+
+- 状态：v2.9.0 已封板
+- 下一步：v2.10+ OCR 后处理（拼写校正 / 表格结构化）+ 视频帧抽取 + 多屏区域截图
+
+---
+
+### v2.10.0 - 2026-07-18
+
+**里程碑：OCR 后处理——从"乱码"到"可读文本"**
+
+Tesseract.js 对中文、低分辨率、复杂背景的识别准确率有限，原始输出常包含噪声字符、中英文混排空格错误、常见 OCR 混淆（0/O、1/l/I）、多余空行等。v2.10.0 引入 OCR 后处理管线，在不换模型的情况下显著提升可读性。
+
+参考经验 1276728 的教训：
+- ❌ 不做全局白名单收紧（会导致系统性退化）
+- ❌ 不做过度修正（猜测比错误更可怕）
+- ✅ 分场景处理（中文/英文/数字各有不同混淆模式）
+- ✅ 上下文感知修正（只在"确定错"的上下文中修正）
+- ✅ 保留原始文本 + 修正记录（可诊断、可回溯）
+
+- **后处理模块**（[vision/ocr-postprocess.ts](file:///e:/Nahida%20agent/src/main/vision/ocr-postprocess.ts)）
+  - 五阶段管线：基础清洗 → 常见 OCR 错误修正 → 中英文空格规范化 → 标点规范化 → 结构分析
+  - 返回 `OcrProcessedResult`：`{ raw, cleaned, structure, corrections }` 四层结构
+  - 每步修正都记录 `OcrCorrection`（类型 + 前后 + 位置），可诊断可回溯
+
+- **阶段 1：基础清洗**
+  - 去除首尾空白、行尾空白、零宽字符、不可见控制字符
+  - 合并连续空行（3+ → 2，保留段落间隔）
+  - 合并连续空格（2+ → 1）
+
+- **阶段 2：常见 OCR 错误修正（上下文感知）**
+  - 核心原则：只在"确定错"的上下文中修正，不做纯猜测
+  - **数字多字母少**（数字占多数，字母≤2）：字母 → 数字修正
+    - 映射表：O→0, l/I→1, S→5, B→8, Z→2, q→9, G→6 等
+  - **字母多数字少**（字母占多数，数字≤2）：数字 → 字母修正
+    - 映射表：0→O, 1→l, 5→S, 8→B, 2→Z, 9→q, 6→G
+  - **纯数字/纯英文**：不修正（避免误伤）
+  - 设计理念：宁漏勿错——不确定的就留着，让用户或 vision 模型判断
+
+- **阶段 3：中英文混排空格规范化**
+  - 中文与英文/数字之间自动加一个空格（符合中文排版规范）
+  - 中文标点旁边不加空格
+  - 已有空格的不重复加
+
+- **阶段 4：标点规范化**
+  - 中文上下文中的英文标点 → 中文标点（。，？！：；）
+  - 判断依据：标点前后都是中文字符
+
+- **阶段 5：结构分析**
+  - `paragraphs`：段落列表（空行分隔）
+  - `tables`：检测到的表格（| 分隔符或 +---+ 边框）
+  - `codeBlocks`：检测到的代码块（缩进 4 空格连续 3 行以上）
+  - `listItems`：检测到的列表项（- * 1. 开头）
+  - `primaryLanguage`：语言检测（zh / en / mixed，按字符占比 70% 阈值）
+  - `qualityScore`：文本质量评分（0-100）
+    - 维度：可打印字符比例、空行比例、行长度均匀度、文本长度
+
+- **vision-manager 集成**（[vision/vision-manager.ts](file:///e:/Nahida%20agent/src/main/vision/vision-manager.ts)）
+  - `runOCR()` 输出从原始 text 改为后处理后的 cleaned text
+  - console 日志增强：记录 raw/cleaned 字符数、质量评分、语言、修正数
+  - 动态 import ocr-postprocess，未启用 OCR 时零开销
+
+- **formatOcrResult()**：格式化输出函数，方便调试和命令行展示
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.10.0 清单**：
+- ✅ 五阶段后处理管线
+- ✅ 上下文感知 OCR 错误修正（数字↔字母混淆）
+- ✅ 中英文混排空格规范化
+- ✅ 中英文标点自动转换
+- ✅ 结构分析（段落/表格/代码块/列表）
+- ✅ 语言检测（zh/en/mixed）
+- ✅ 文本质量评分（0-100）
+- ✅ 修正记录可诊断（每步都有 from/to/position）
+- ✅ vision-manager 集成（输出自动走后处理）
+
+**设计亮点**：
+1. **宁漏勿错**：只在"确定错"的上下文中修正，避免系统性退化（吸取经验 1276728 教训）
+2. **四层结果**：raw/cleaned/structure/corrections，既方便使用又方便诊断
+3. **无新依赖**：纯字符串处理，不引任何新包
+4. **动态 import**：未启用 OCR 时零开销
+5. **质量评分**：让上层可以根据质量决定是否需要二次处理或提示用户
+
+**为什么不做拼写校正**：
+- 中文没有"拼写"概念，只有 OCR 识别错误
+- 英文拼写校正需要词典，体积大且不一定准确
+- 当前阶段聚焦在"确定错"的修正，不做猜测性校正
+- 未来可接入本地词典做轻量英文拼写校正
+
+- 状态：v2.10.0 已封板
+- 下一步：v2.11+ 视频帧抽取 + 多屏区域截图 + OCR 行级置信度
+
+---
+
+### v2.11.0 - 2026-07-18
+
+**里程碑：多屏区域截图——从"单屏"到"全桌面覆盖"**
+
+v2.9.0 的区域截图只支持主屏，多显示器用户体验不佳——副屏上的内容要截屏只能先拖到主屏。v2.11.0 改造覆盖窗口为多屏模式，用户在任意屏幕上都能框选。
+
+- **覆盖窗口多屏化**（[vision/capture-overlay.ts](file:///e:/Nahida%20agent/src/main/vision/capture-overlay.ts)）
+  - 从单窗口 `overlayWindow` 改为数组 `overlayWindows: BrowserWindow[]`
+  - `showRegionOverlay()` 遍历 `screen.getAllDisplays()`，每屏创建一个独立的覆盖窗口
+  - 每个窗口的 bounds 严格对齐对应显示器（x, y, width, height）
+  - 窗口对象上挂 `_displayId` 属性，回调时可识别来源
+
+- **安全机制**
+  - `resolved` 标志位：防止多窗口同时 resolve（竞态条件）
+  - 第一个完成选区 / 取消的窗口生效，后续的直接返回 `already-resolved`
+  - 完成后 `closeAllOverlays()` 统一关闭所有窗口并清理状态
+  - 所有窗口都关闭时自动 resolve(null)（兜底取消）
+
+- **displayId 三重获取**（确保不丢失）
+  1. payload 中的 displayId（渲染层传入）
+  2. `BrowserWindow.fromWebContents(event.sender)` + `_displayId`（主进程侧识别）
+  3. fallback 到主屏 id（极端情况兜底）
+
+- **渲染层多屏提示**（[renderer/capture-overlay/index.html](file:///e:/Nahida%20agent/src/renderer/capture-overlay/index.html)）
+  - 多屏场景下 hint 显示 "屏幕 X / Y"
+  - 单屏时保持原样（不显示编号，界面更干净）
+  - 每个窗口独立的选区状态，互不干扰
+
+- **handlers 集成**（[ipc/handlers.ts](file:///e:/Nahida%20agent/src/main/ipc/handlers.ts)）
+  - `/screenshot region` 先调用 `listDisplays()` 判断是否多屏
+  - 多屏时提示语显示 "检测到 N 个显示器"
+  - `captureRegion(region, region.displayId)` 按指定显示器截图 + 裁剪
+
+- **RegionSelection 接口**
+  ```typescript
+  export interface RegionSelection {
+    displayId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+  ```
+
+**类型检查**：TS strict 模式 + `noUncheckedIndexedAccess` 三处 0 错误
+
+**v2.11.0 清单**：
+- ✅ 多屏覆盖窗口（每屏一个独立 BrowserWindow）
+- ✅ 竞态防护（resolved 标志位 + closeAllOverlays 统一清理）
+- ✅ displayId 三重获取机制
+- ✅ 渲染层多屏编号提示
+- ✅ captureRegion 支持 displayId 参数
+- ✅ handlers /screenshot region 多屏体验升级
+- ✅ 单屏场景零退化（行为与 v2.9 完全一致）
+
+**设计亮点**：
+1. **每屏独立窗口**：而非一个超大窗口覆盖所有屏幕——避免跨屏 DPR 不一致、坐标转换复杂等问题
+2. **竞态防护严谨**：resolved 标志位 + 第一个生效 + 统一关闭，防止多窗口同时回调
+3. **向后兼容**：单屏用户行为完全不变，多屏用户自动获得增强体验
+4. **displayId 三重保险**：渲染层传 → 主进程识别 → 主屏兜底，确保不丢失
+5. **无新依赖**：纯 Electron API + 现有架构，零新增包
+
+**为什么不用一个超大窗口覆盖所有屏幕**：
+- 多屏 DPR 可能不同（如主屏 2x、副屏 1x），一个窗口只能有一个 DPR
+- Electron 的 transparent 窗口在跨显示器边界时可能有渲染问题
+- 坐标转换复杂（全局坐标 vs 窗口相对坐标）
+- 每屏独立窗口更简单、更可靠、性能更好
+
+- 状态：v2.11.0 已封板
+- 下一步：v2.12+ 视频帧抽取 + OCR 行级置信度 + 屏幕实时监控模式
+
+---
+
+### v2.12.0 - 2026-07-18
+
+**里程碑：视频分析能力（看动态内容）**
+
+视觉感知闭环第三阶段——从"看静态图片"进化到"看动态视频"。通过抽帧策略把视频转换成多帧图像序列，交给 vision 模型理解视频内容。
+
+**为什么 v2.12 做视频分析**：
+1. 视觉感知三阶段：被动接收图片（v2.5-v2.7）→ 主动观察屏幕（v2.8-v2.11）→ 看动态内容（v2.12）
+2. 有了多图 vision 分析的基础（v2.5 的 images 数组），视频抽帧后可以直接复用现有链路
+3. 不内嵌 ffmpeg，检测系统已安装的 ffmpeg，零包体积膨胀
+4. 动态 import 按需加载，不使用视频功能时零开销
+
+**核心功能**：
+
+1. **视频帧抽取模块** `src/main/vision/video-frame.ts`
+   - 多路径检测系统 ffmpeg（PATH / 常见安装目录 / 环境变量）
+   - 支持格式：mp4 / avi / mkv / mov / webm / flv / wmv / m4v
+   - 按视频时长动态决定抽帧数：≤30秒3帧 / 30-300秒6帧 / >300秒10帧
+   - 时间点均匀分布，自动跳过片头片尾（各5%）
+   - 每帧带时间戳，便于模型理解时序
+   - 帧图片自动清理（30分钟 TTL，复用 media 目录清理机制）
+
+2. **vision-manager 视频分析入口**
+   - `processVideoRequest()` 完整流程：抽帧 → 增强 prompt → vision 多图分析 → 可选 OCR
+   - 增强 prompt 带帧时间戳，帮助模型理解视频时序
+   - OCR 逐帧识别，结果带时间戳合并
+
+3. **IPC 通道扩展**
+   - `video:upload`：渲染层上传视频文件路径
+   - `video:result`：主进程推送视频分析结果
+
+4. **用户体验**
+   - `/video` 命令帮助信息
+   - 未安装 ffmpeg 时友好提示安装方法
+   - 流式输出 + Live2D 动作 + TTS 完整联动
+
+**v2.12.0 清单**：
+
+| 模块 | 文件 | 状态 |
+|------|------|------|
+| 视频帧抽取 | `src/main/vision/video-frame.ts` | ✅ |
+| vision 集成 | `src/main/vision/vision-manager.ts` | ✅ |
+| IPC 通道 | `src/shared/types/ipc.ts` | ✅ |
+| preload 白名单 | `src/preload/index.ts` | ✅ |
+| 命令路由 | `src/main/router/router.ts` | ✅ |
+| IPC handlers | `src/main/ipc/handlers.ts` | ✅ |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **零新增依赖**：检测系统 ffmpeg，不内嵌，不增加包体积
+2. **动态 import**：视频模块按需加载，不使用时零开销
+3. **智能抽帧**：按时长动态决定帧数，短视频不浪费、长视频信息充分
+4. **时序感知**：帧带时间戳 + 增强 prompt，模型能理解视频发展顺序
+5. **复用现有链路**：抽帧后直接走已有的多图 vision 分析，不重复造轮子
+
+**为什么不用内嵌 ffmpeg**：
+- ffmpeg 二进制体积巨大（~80MB），为了一个可选功能不值得
+- 大多数开发者电脑已经装了 ffmpeg（通过 scoop/chocolatey/手动）
+- 检测不到时友好提示安装，比内嵌臃肿的二进制更优雅
+
+- 状态：v2.12.0 已封板
+- 下一步：v2.13+ 视频抽帧质量优化 + OCR 行级置信度 + 屏幕实时监控模式
+
+---
+
+### v2.13.0 - 2026-07-18
+
+**里程碑：视频智能抽帧（场景切换检测）**
+
+v2.12 的视频抽帧是纯均匀分布——不管视频内容如何，等间隔取帧。这会导致：动作片场景切换频繁但只取到少数几个场景；静态对话视频浪费帧数在几乎相同的画面上。v2.13 引入 ffmpeg 场景检测，在画面发生显著变化的时间点抽帧，让每一帧都"有信息量"。
+
+**为什么 v2.13 做场景检测抽帧**：
+1. 均匀抽帧的最大问题：可能 6 帧里有 4 帧几乎一样（静态场景），浪费了 2/3 的分析预算
+2. ffmpeg 自带 scene 滤镜（`select='gt(scene,0.3)'`），零额外依赖
+3. 场景检测 + 均匀分布 fallback，保证最差情况也不会比 v2.12 差
+4. 增强 prompt 附带策略信息，帮助 vision 模型理解帧之间的关系
+
+**核心改动**：
+
+1. **场景切换检测** `detectSceneCuts()`
+   - ffmpeg 命令：`-vf "select='gt(scene,0.3)',showinfo" -an -f null -`
+   - `-an` 忽略音频流加速，`-f null -` 只跑滤镜不输出
+   - 解析 stderr 中 `showinfo` 的 `pts_time:` 提取场景切换时间戳
+   - 去重处理（相邻帧 scene 值可能连续超阈值，0.5s 内的去重）
+   - 15s 超时保护，超时自动 fallback 到均匀分布
+
+2. **三策略智能抽帧**
+   - `scene`：场景切换点 >= 目标帧数 → 均匀选取 N 个场景切换帧
+   - `mixed`：场景切换点 > 0 但不够 → 场景切换帧 + 均匀分布补充（去近重 1s 内）
+   - `uniform`：无场景切换点 → 纯均匀分布（与 v2.12 一致）
+
+3. **辅助函数**
+   - `selectEvenly()`：从候选时间戳中均匀选取 N 个
+   - `generateUniformTimes()`：生成均匀分布时间戳（跳过片头片尾）
+
+4. **全链路传递策略信息**
+   - `VideoExtractResult.strategy` → `VideoAnalysisResult.strategy` → IPC `videoResultSchema.strategy`
+   - 增强 prompt 附带策略提示（"场景切换帧"/"混合"/"均匀分布"）
+   - handlers 传递 strategy 到渲染层
+   - 日志记录策略和具体时间戳
+
+**v2.13.0 清单**：
+
+| 模块 | 文件 | 改动 |
+|------|------|------|
+| 场景检测 + 智能抽帧 | `src/main/vision/video-frame.ts` | 新增 `detectSceneCuts` / `selectEvenly` / `generateUniformTimes`，改造 `extractFrames` |
+| vision 集成 | `src/main/vision/vision-manager.ts` | `VideoAnalysisResult.strategy` + 增强 prompt 策略提示 |
+| IPC schema | `src/shared/types/ipc.ts` | `videoResultSchema.strategy` 字段 |
+| IPC handlers | `src/main/ipc/handlers.ts` | 传递 strategy |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **优雅降级**：场景检测失败/超时/无结果 → 自动 fallback 到均匀分布，最差也不会比 v2.12 差
+2. **去重保护**：场景切换点和均匀点距离 <1s 时去重，避免浪费帧数在相近画面
+3. **超时保护**：15s 超时防止长视频场景检测卡死，用户体验有保障
+4. **prompt 增强**：策略提示帮助 vision 模型理解帧之间的关系（"这些是场景切换帧"→模型知道每帧是独立场景）
+5. **零新增依赖**：纯 ffmpeg 滤镜，不需要额外库
+
+**为什么阈值 0.3**：
+- ffmpeg scene 值范围 0-1，0 = 完全相同，1 = 完全不同
+- 0.3 是 ffmpeg 社区常用阈值，能检出大多数显著场景切换
+- 太低（如 0.1）会误检微小变化（如光照波动）
+- 太高（如 0.5）会漏检渐变场景切换
+
+- 状态：v2.13.0 已封板
+- 下一步：v2.14+ OCR 行级置信度 + 屏幕实时监控模式
+
+---
+
+### v2.14.0 - 2026-07-18
+
+**里程碑：OCR 行级置信度（让识别结果"知道自己准不准"）**
+
+v2.7-v2.10 的 OCR 只返回纯文本，用户和模型都无法判断哪些行可信、哪些行需要二次核对。v2.14 提取 Tesseract.js 的行级置信度数据，通过全链路传到渲染层，支持未来 UI 高亮低置信度行，并把置信度纳入诊断日志。
+
+**为什么 v2.14 做行级置信度**：
+1. OCR 不是非黑即白——一行 95% 可信，另一行可能只有 40%（模糊/小字/倾斜）
+2. 没有置信度时，用户只能全盘信任或全盘怀疑，都不合理
+3. Tesseract.js 早就返回了 `result.data.lines[].confidence`，但 v2.7 只取了 `.text`，浪费了数据
+4. 置信度还能驱动后处理策略：低置信度行可以触发更激进的修正或二次识别
+
+**核心改动**：
+
+1. **ocr-postprocess.ts 置信度类型与聚合**
+   - 新增 `OcrLineConfidence`（行文本 + 置信度 + 等级 high/medium/low）
+   - 新增 `OcrConfidenceSummary`（行列表 + 平均/最低/低置信度行数）
+   - 阈值：`>=85` high，`>=60` medium，`<60` low（ffmpeg/Tesseract 社区经验值）
+   - `postProcessOcr` 签名扩展：接受可选的 Tesseract 行数据
+   - `summarizeConfidence` 聚合函数：无行数据时用结构质量评分兜底
+
+2. **vision-manager.ts 增强 OCR 接口**
+   - 新增 `OcrEnhancedResult` 类型（text + raw + confidence）
+   - 新增 `runOCREnhanced()` 返回完整结果（含置信度）
+   - `extractTesseractLines()` 兼容 `result.data.lines` 和 `result.data.words`（某些 Tesseract 版本不返回 lines，用 words 聚合近似）
+   - 旧 `runOCR()` 保留为简版包装（字符串返回，向后兼容）
+   - 日志增强：输出 `confidence=XX% (min=YY%, low=N/M)`
+
+3. **vision / video 分析流程集成置信度**
+   - `VisionAnalysisResult.ocrConfidence`：多图时取第一张有置信度的作为代表
+   - `VideoAnalysisResult.ocrConfidence`：所有帧的置信度加权平均 + 累加低置信度行数
+   - `processVisionRequest` / `processVideoRequest` 全部改用 `runOCREnhanced`
+
+4. **IPC schema + handlers 全链路传递**
+   - 新增 `ocrConfidenceSchema`（vision / video 共用）
+   - `visionResultSchema.ocrConfidence` + `videoResultSchema.ocrConfidence`
+   - handlers 两个推送点都传 `ocrConfidence`
+
+**v2.14.0 清单**：
+
+| 模块 | 文件 | 改动 |
+|------|------|------|
+| 置信度类型 + 聚合 | `src/main/vision/ocr-postprocess.ts` | `OcrLineConfidence` / `OcrConfidenceSummary` / `summarizeConfidence` / `postProcessOcr` 签名扩展 |
+| 增强 OCR 接口 | `src/main/vision/vision-manager.ts` | `OcrEnhancedResult` / `runOCREnhanced` / `extractTesseractLines` / `runOCR` 简版包装 |
+| 分析流程集成 | `src/main/vision/vision-manager.ts` | `VisionAnalysisResult.ocrConfidence` / `VideoAnalysisResult.ocrConfidence` |
+| IPC schema | `src/shared/types/ipc.ts` | `ocrConfidenceSchema` + vision/video schema 扩展 |
+| IPC handlers | `src/main/ipc/handlers.ts` | 两个推送点传 `ocrConfidence` |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **向后兼容**：`runOCR` 字符串返回保留，旧调用方零改动；`postProcessOcr` 的 Tesseract 行参数可选
+2. **优雅降级**：Tesseract 不返回 lines 时用 words 聚合；words 也没有时用结构质量评分兜底
+3. **多图策略**：vision 多图取第一张代表，video 多帧加权平均，各有道理
+4. **低置信度行单独提取**：`lowConfidenceLines` 数组便于未来 UI 直接高亮
+5. **零新增依赖**：纯 Tesseract.js 已有数据，只是之前没用
+
+**为什么阈值 85/60**：
+- Tesseract confidence 范围 0-100，但不是线性可信度
+- 85+ 基本可以信任，60-85 需要留意，<60 大概率有问题
+- 这是 OCR 社区经验值，比理论推导更实用
+
+**未来扩展（v2.15+ 可选）**：
+- 渲染层 UI 高亮低置信度行（黄/红色背景）
+- 低置信度行触发二次识别（调高分辨率/换语言包）
+- 置信度驱动后处理策略（低置信度行更激进修正）
+
+- 状态：v2.14.0 已封板
+- 下一步：v2.15+ 屏幕实时监控模式 + 渲染层置信度 UI
+
+---
+
+### v2.15.0 - 2026-07-18
+
+**里程碑：渲染层 Vision/OCR 结果展示（让用户看到"我看到了什么"）**
+
+v2.5-v2.14 在主进程构建了完整的视觉感知链路（图片分析、截图、视频、OCR、置信度），但渲染层只监听了 `agent:model-delta` 文本流——主进程推送的 `vision:result` 和 `video:result` 事件根本没有被消费。v2.14 把置信度传到渲染层了，但渲染层连基本的 OCR 文本展示都没接。v2.15 补齐这个缺口：让用户看到纳西妲"看到了什么"。
+
+**为什么 v2.15 做渲染层展示**：
+1. v2.14 把置信度传到渲染层，但渲染层没监听 → 数据浪费
+2. 用户上传图片后，OCR 识别的文字不在 UI 上展示 → 用户不知道纳西妲"看清了"哪些字
+3. 视频分析后，抽帧策略/帧数/时长等元信息不展示 → 用户不理解纳西妲怎么"看视频"的
+4. 没有置信度高亮，用户无法判断 OCR 结果可信度
+
+**核心改动**：
+
+1. **Message 类型扩展** [types.ts](file:///e:/Nahida%20agent/src/renderer/main/types.ts)
+   - `OcrConfidenceInfo`：平均/最低/低置信度行数/总行数
+   - `Message.ocrText` / `ocrConfidence` / `videoMeta`（帧数/时长/策略）
+
+2. **ChatPanel 事件监听** [ChatPanel.tsx](file:///e:/Nahida%20agent/src/renderer/main/ChatPanel.tsx#L125-L175)
+   - 监听 `vision:result` → 附加 ocrText + ocrConfidence 到当前 streaming 消息
+   - 监听 `video:result` → 附加 ocrText + ocrConfidence + videoMeta 到当前 streaming 消息
+   - preload 白名单早已允许这两个通道（v2.12/v2.14 加的），无需改 preload
+
+3. **MessageBubble OCR 展示块** [MessageBubble.tsx](file:///e:/Nahida%20agent/src/renderer/main/MessageBubble.tsx#L110-L183)
+   - 视频元信息条：📹 视频 · 时长 · 帧数 · 抽帧策略（场景切换/混合/均匀）
+   - OCR 文本块：📝 OCR 识别 + 置信度徽章（绿/橙/红 + 等级标签 + 低置信度行数）
+   - `confidenceColor()`：≥85 绿、≥60 橙、<60 红
+   - `confidenceLabel()`：可信/一般/需核对
+   - 置信度徽章 hover 显示详细 tooltip（平均/最低/低置信度行数）
+
+4. **设计风格**
+   - 视频元信息：浅绿背景（#f1f8e9），呼应纳西妲草系主题
+   - OCR 文本：浅米黄背景（#faf5e6），视觉上与主文本区分
+   - 置信度徽章颜色与 border 同色系，低置信度时整个 OCR 块边框变红提示
+
+**v2.15.0 清单**：
+
+| 模块 | 文件 | 改动 |
+|------|------|------|
+| Message 类型 | `src/renderer/main/types.ts` | `OcrConfidenceInfo` / `Message.ocrText` / `ocrConfidence` / `videoMeta` |
+| 事件监听 | `src/renderer/main/ChatPanel.tsx` | 监听 `vision:result` / `video:result`，附加到 streaming 消息 |
+| UI 展示 | `src/renderer/main/MessageBubble.tsx` | OCR 文本块 + 置信度徽章 + 视频元信息条 |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **零新依赖**：纯 React + 内联样式，不引入新 UI 库
+2. **向后兼容**：OCR/视频字段都是可选，旧消息（纯文本）渲染不受影响
+3. **置信度可视化**：颜色 + 文字 + tooltip 三层信息，一眼看出可信度
+4. **流式友好**：OCR/视频结果在 streaming 消息上就地附加，不打断文本流
+5. **主题一致**：草绿/米黄色系，与纳西妲整体 UI 风格统一
+
+**用户体验提升**：
+- 上传图片后，能看到纳西妲识别出的文字 + 置信度，知道哪些字可信
+- 上传视频后，能看到视频时长/帧数/抽帧策略，理解纳西妲怎么"看"视频
+- 低置信度行数明确标注，提示用户可能需要核对
+
+- 状态：v2.15.0 已封板
+- 下一步：v2.16+ 屏幕实时监控模式 + 低置信度行二次识别
+
+---
+
+### v2.16.0 - 2026-07-19
+
+**里程碑：屏幕实时监控模式（让纳西妲主动"看"屏幕变化）**
+
+v2.5-v2.15 让纳西妲能"看"用户上传的图片、截图、视频，但这些都是被动触发——用户必须主动操作。v2.16 引入屏幕实时监控模式，让纳西妲能主动观察屏幕，当画面发生显著变化时自动触发分析。
+
+**为什么 v2.16 做屏幕监控**：
+1. 视觉感知闭环的最后一块：被动接收（v2.5-v2.7）→ 主动截图（v2.8-v2.11）→ 看动态视频（v2.12-v2.15）→ **主动监控屏幕变化**（v2.16）
+2. 场景需求：用户玩游戏时纳西妲可以主动提醒（"Boss 要放技能了！"）、用户工作时提醒休息、检测到报错时自动分析
+3. 不做永久后台监控（用户主动开启），避免资源浪费和隐私问题
+4. 帧差检测算法轻量（64x64 缩略图对比），CPU 占用极低
+
+**核心改动**：
+
+1. **屏幕监控模块** `src/main/vision/screen-monitor.ts`
+   - **帧差检测算法**：前后两帧缩放为 64x64，计算 RGB 通道差值百分比（0-100）
+   - **可配置参数**：截图间隔（默认 2000ms）、帧差阈值（默认 5%）、分析冷却（默认 5000ms）
+   - **状态管理**：`MonitorState`（isActive / frameCount / changeCount / lastAnalyzeTime）
+   - **帧差回调**：`setOnFrameDiff()` 当差异超过阈值时触发
+   - **资源管理**：自动清理定时器、保留最近 10 张截图、停止时清空缓存
+   - **公开 API**：`startMonitor()` / `stopMonitor()` / `getState()` / `isMonitoring()`
+
+2. **vision-manager.ts 集成**
+   - 新增 `startScreenMonitor()` / `stopScreenMonitor()` 入口
+   - 帧差回调触发 `processVisionRequest()` 自动分析变化画面
+   - 分析冷却机制：5 秒内不重复分析（避免刷屏）
+
+3. **IPC 通道扩展**
+   - `monitor:start`：渲染层请求开始监控（带配置参数）
+   - `monitor:stop`：渲染层请求停止监控
+   - `monitor:state`：主进程推送监控状态（isActive / frameCount / changeCount）
+   - `monitor:frame-diff`：帧差变化事件（diffPercent / exceeded / imagePath）
+
+4. **`/monitor` 命令**
+   - `/monitor start [interval] [threshold]`：开始监控
+   - `/monitor stop`：停止监控
+   - `/monitor status`：查看监控状态
+   - `/monitor analyze`：立即分析当前画面
+
+5. **渲染层监控状态显示**
+   - StatusBar 显示监控状态图标（🔵 运行中 / ⚪ 已停止）
+   - 监控启动时显示提示消息（"纳西妲开始观察屏幕了~"）
+   - 帧差变化时显示变化百分比和截图预览
+
+**v2.16.0 清单**：
+
+| 模块 | 文件 | 状态 |
+|------|------|------|
+| 屏幕监控模块 | `src/main/vision/screen-monitor.ts` | ✅ |
+| vision 集成 | `src/main/vision/vision-manager.ts` | ✅ |
+| IPC 通道 | `src/shared/types/ipc.ts` | ✅ |
+| preload 白名单 | `src/preload/index.ts` | ✅ |
+| 命令路由 | `src/main/router/router.ts` | ✅ |
+| IPC handlers | `src/main/ipc/handlers.ts` | ✅ |
+| 渲染层状态显示 | `src/renderer/main/StatusBar.tsx` | ✅ |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **轻量帧差算法**：64x64 缩略图对比，CPU 占用极低，不影响游戏/工作
+2. **用户主动控制**：默认关闭，用户明确开启才监控，避免隐私担忧
+3. **资源自动清理**：保留最近 10 张截图，停止时清空缓存，不占磁盘空间
+4. **冷却机制**：5 秒分析冷却，避免画面频繁变化时刷屏
+5. **优雅降级**：帧差计算失败时返回 0（视为无变化），不影响监控循环
+
+**为什么帧差阈值设为 5%**：
+- < 3%：鼠标移动、窗口闪烁等微小变化会误触发
+- 5%：刚好能捕捉到页面切换、弹窗出现、视频场景切换等有意义的变化
+- > 10%：可能错过一些中等程度的变化（如表单填写、文字更新）
+
+**使用场景**：
+- `/monitor start` → 纳西妲开始观察屏幕，检测到变化时自动分析
+- `/monitor start 1000 3` → 1秒间隔，3%阈值（更敏感）
+- `/monitor stop` → 停止监控
+- `/monitor status` → 查看已捕获帧数和检测到的变化次数
+- `/monitor analyze` → 立即分析当前屏幕画面
+
+- 状态：v2.16.0 已封板
+- 下一步：v2.17+ 低置信度行二次识别 + 监控规则配置（白名单窗口）
+
+---
+
+### v2.17.0 - 2026-07-19
+
+**里程碑：OCR 低置信度行二次识别（让识别结果"越改越准"）**
+
+v2.14 让 OCR 结果带上了行级置信度，v2.15 让用户看到了置信度。但低置信度行只能"标红"让用户自己核对——纳西妲没有尝试"再看一眼"。v2.17 引入二次识别：对低置信度行裁剪 + 放大 + PSM 单行模式重新识别，只在更可信时替换，让 OCR 结果自我进化。
+
+**为什么 v2.17 做二次识别**：
+1. v2.14 暴露了低置信度行，但没有"补救"机制——标红只是告知问题，不解决问题
+2. 低置信度的常见原因：文字太小、模糊、行间干扰——裁剪放大能直接改善
+3. PSM 7（单行模式）避免了多行场景的歧义，对单行识别更准
+4. "宁漏勿错"原则：只在二次识别置信度更高时替换，不会越改越差
+
+**核心改动**：
+
+1. **二次识别模块** `src/main/vision/ocr-rerecognize.ts`
+   - **裁剪 + 放大**：`cropAndUpscale()` 用 pngjs PNG.bitblt 裁剪 bbox 区域（带 5px 边距），2x 最近邻插值放大
+   - **单行识别**：`recognizeSingleLine()` 用 PSM 7（SINGLE_LINE）模式识别裁剪后的区域
+   - **主入口**：`rerecognizeLowConfidenceLines()` 逐行处理，返回 RerecognizeSummary（含逐行结果 + 改进前后文本）
+   - **限制**：最多 5 行（避免长文档延迟），10 秒单行超时，最小裁剪区域 8px
+   - **采纳策略**：二次识别置信度 > 原始置信度才标记 improved
+
+2. **BoundingBox 类型** `src/main/vision/ocr-postprocess.ts`
+   - 新增 `BoundingBox` 接口（x0/y0/x1/y1），导出供 rerecognize 模块使用
+   - `OcrLineConfidence` 新增可选 `bbox` 字段
+   - `postProcessOcr` 的 tesseractLines 参数扩展 bbox
+   - `summarizeConfidence` 传递 bbox 到 OcrLineConfidence
+
+3. **vision-manager 集成**
+   - `extractTesseractLines` 提取 Tesseract 行的 bbox（result.data.lines[].bbox）
+   - `OcrEnhancedResult` 新增 `rerecognize` 字段（rerecognizedCount / improvedCount）
+   - `runOCREnhanced` 第一次识别后，检查低置信度行：
+     - 筛选有 bbox 的低置信度行
+     - 调用 `rerecognizeLowConfidenceLines` 二次识别
+     - 用改进结果替换原文本（按行匹配 replace）
+     - 二次识别失败非致命，不影响主流程
+
+**v2.17.0 清单**：
+
+| 模块 | 文件 | 改动 |
+|------|------|------|
+| 二次识别模块 | `src/main/vision/ocr-rerecognize.ts` | 新增（cropAndUpscale / recognizeSingleLine / rerecognizeLowConfidenceLines） |
+| bbox 类型 | `src/main/vision/ocr-postprocess.ts` | BoundingBox / OcrLineConfidence.bbox / postProcessOcr 签名扩展 |
+| 集成 | `src/main/vision/vision-manager.ts` | extractTesseractLines 提取 bbox / OcrEnhancedResult.rerecognize / runOCREnhanced 二次识别 |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **宁漏勿错**：只在二次识别置信度更高时替换，不会越改越差（与 v2.10 后处理原则一致）
+2. **限制最多 5 行**：避免长文档场景下逐行二次识别导致延迟过高
+3. **动态 import**：rerecognize 模块按需加载，无低置信度行时零开销
+4. **非致命设计**：二次识别失败不影响主 OCR 流程，只 warn 不 throw
+5. **PSM 7 单行模式**：避免多行场景歧义，对单行识别更精准
+
+**为什么裁剪要加 5px 边距**：
+- Tesseract 的 bbox 可能不完全覆盖文字边缘（特别是 ascender/descender）
+- 没有边距的裁剪可能切掉字符上下部分，反而降低二次识别准确率
+- 5px 是经验值，足够覆盖大部分字体的 ascender/descender
+
+**为什么放大 2x 而不是 3x**：
+- 2x 已经能让 Tesseract 看清细节，3x 边际收益递减
+- 3x 会增加图像体积，拖慢 Tesseract 处理速度
+- 对于极小文字（<8px），2x 后 16px 已经足够 Tesseract 识别
+
+**为什么用 PSM 7 而不是 PSM 6**：
+- PSM 6（SINGLE_BLOCK）：假设为统一文本块，多行时更准
+- PSM 7（SINGLE_LINE）：假设为单行文本，裁剪后只有一行，PSM 7 更匹配
+- PSM 13（RAW_LINE）：不假设字符顺序，对特殊排版可能有用，但常规场景 PSM 7 更稳
+
+- 状态：v2.17.0 已封板
+- 下一步：v2.18+ 监控规则配置（白名单窗口）+ OCR 多语言自动切换
+
+---
+
+### v2.18.0 - 2026-07-19
+
+**里程碑：监控规则配置 + OCR 多语言自动切换**
+
+v2.16 实现了屏幕实时监控，但所有窗口都会被监控——用户可能只想监控游戏窗口，不想监控聊天窗口。v2.18 引入窗口过滤器（白名单/黑名单），让监控更精准。同时，OCR 之前只能用配置文件指定单一语言，现在支持多语言自动检测，从文件名或用户提示推断语言。
+
+**为什么 v2.18 做这两个功能**：
+1. **窗口过滤**：v2.16 监控所有窗口，可能在用户看视频、聊天时误触发分析，干扰用户体验。白名单/黑名单让用户精确控制监控范围。
+2. **OCR 多语言**：之前硬编码 `chi_sim+eng`，遇到纯英文、日文、韩文文档识别准确率下降。自动检测语言能显著提升多语言场景的识别效果。
+
+**核心改动**：
+
+1. **窗口过滤** `src/main/vision/screen-monitor.ts`
+   - **WindowFilter 接口**：`mode: 'whitelist' | 'blacklist'` + `rules: Array<string | RegExp>`
+   - **MonitorConfig** 新增 `windowFilter` 字段
+   - **getActiveWindowTitle**：PowerShell 调用 User32.dll 获取当前活动窗口标题（Windows）
+   - **checkWindowFilter**：检查当前窗口是否符合规则（白名单只匹配规则内窗口，黑名单排除规则内窗口）
+   - **缓存机制**：窗口标题缓存 5 秒，避免频繁调用 PowerShell
+   - **monitorTick**：截图前先检查窗口过滤器，不符合规则则跳过
+
+2. **OCR 多语言检测** `src/main/vision/ocr-language-detect.ts`（新增）
+   - **Unicode 范围检测**：基于字符的 Unicode 范围统计各语言字符比例
+   - **支持语言**：中文简体（chi_sim）、中文繁体（chi_tra）、英文（eng）、日文（jpn）、韩文（kor）
+   - **简体/繁体区分**：通过特征字符判断（如"为/為"、"爱/愛"）
+   - **混合语言**：检测到中文/日文/韩文时，自动添加英文（混排场景）
+   - **预检测**：`hintToLanguage()` 从文件名/用户提示推断语言（如文件名含 zh/jp/ko）
+   - **零依赖**：纯 TypeScript 实现，不引入外部语言检测库
+
+3. **vision-manager 集成**
+   - `runOCREnhanced` 新增 `languageHint?: string` 参数
+   - 如果配置中未指定语言且有 hint，调用 `hintToLanguage()` 推断
+   - `OcrEnhancedResult` 新增 `language` 字段（code + autoDetected）
+   - 返回时标记是否为自动检测
+
+**v2.18.0 清单**：
+
+| 模块 | 文件 | 改动 |
+|------|------|------|
+| 窗口过滤 | `src/main/vision/screen-monitor.ts` | WindowFilter / getActiveWindowTitle / checkWindowFilter / monitorTick 集成 |
+| OCR 多语言 | `src/main/vision/ocr-language-detect.ts` | 新增（detectLanguage / getTesseractLanguage / hintToLanguage） |
+| vision 集成 | `src/main/vision/vision-manager.ts` | runOCREnhanced languageHint / OcrEnhancedResult.language |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **窗口过滤缓存**：5 秒缓存窗口标题，避免每帧都调用 PowerShell（减少 CPU 开销）
+2. **Unicode 范围检测**：零依赖，简单可靠，对 OCR 场景足够准确
+3. **混合语言支持**：检测到中文时自动添加英文，符合中文文档常见的中英混排场景
+4. **简体/繁体自动区分**：通过特征字符判断，不需要额外训练数据
+5. **配置优先**：配置文件指定语言时使用配置值，未指定时自动检测
+
+**窗口过滤使用场景**：
+- 白名单模式：只监控游戏窗口（`{ mode: 'whitelist', rules: ['Genshin Impact', /Star Rail/] }`）
+- 黑名单模式：排除聊天窗口（`{ mode: 'blacklist', rules: ['Discord', 'QQ'] }`）
+
+**语言检测使用场景**：
+- 用户上传文件名含 `jp` 的图片 → 自动用 `jpn` 语言
+- 用户输入提示含"日文" → 自动用 `jpn` 语言
+- 未指定时 fallback 到配置的默认语言
+
+- 状态：v2.18.0 已封板
+- 下一步：v2.19+ OCR 低置信度行二次识别优化 + 监控规则持久化
+
+---
+
+### v2.19.0 - 2026-07-19
+
+**里程碑：监控规则持久化 + OCR 二次识别并行优化**
+
+v2.18 让监控支持窗口过滤，但规则只在内存中——重启后丢失。v2.19 将监控规则持久化到 config.json，跨重启保留。同时优化 OCR 二次识别：从串行改为并行，提升处理速度。
+
+**为什么 v2.19 做这两个功能**：
+1. **监控规则持久化**：v2.18 的窗口过滤规则每次重启都要重新设置，用户体验差。持久化到 config.json 后，用户配置一次即可长期使用。
+2. **OCR 二次识别并行**：v2.17 的二次识别是串行 for 循环，5 行低置信度文本要等 5 轮裁剪+识别。并行处理后，裁剪/放大阶段同时进行，显著降低等待时间。
+
+**核心改动**：
+
+1. **监控规则持久化** `src/shared/types/config.ts`
+   - 新增 `MonitorPersistConfig` 接口：
+     - `intervalMs` / `threshold` / `cooldownMs`：默认监控参数
+     - `windowFilter`：持久化的窗口过滤规则（mode + rules 字符串数组）
+     - `autoStart`：是否在应用启动时自动开始监控
+   - `VisionConfig` 新增 `monitor?: MonitorPersistConfig` 字段
+   - 持久化时只支持字符串规则（RegExp 无法序列化到 JSON）
+
+2. **startScreenMonitor 配置读取** `src/main/vision/vision-manager.ts`
+   - 未传入 config 时，自动从 `getConfig().vision?.monitor` 读取持久化配置
+   - 将持久化的 windowFilter（字符串数组）转换为 MonitorConfig 的 windowFilter
+   - 移除了 v2.16 中的 `ScreenMonitor.startMonitor(ScreenMonitor.getState().config, undefined)` 递归调用（会导致重复启动监控，是个 bug）
+
+3. **OCR 二次识别并行优化** `src/main/vision/ocr-rerecognize.ts`
+   - 抽取 `processSingleLine()` 为独立函数（单行完整处理：裁剪+放大+识别）
+   - 主入口从串行 for 循环改为 `Promise.all` 并行处理
+   - 保留原始顺序：Promise.all 结果按索引重组，不破坏文本顺序
+   - 改进采纳策略：要求二次识别文本非空，避免空文本覆盖原始结果
+   - 移除了冗余的 `improvedCount` 累加，改用 `results.filter(r => r.improved).length`
+
+**v2.19.0 清单**：
+
+| 模块 | 文件 | 改动 |
+|------|------|------|
+| 配置类型 | `src/shared/types/config.ts` | MonitorPersistConfig / VisionConfig.monitor |
+| 配置读取 | `src/main/vision/vision-manager.ts` | startScreenMonitor 从 config.json 读取默认配置 + 修复递归调用 bug |
+| 并行优化 | `src/main/vision/ocr-rerecognize.ts` | processSingleLine 抽取 / Promise.all 并行 / 采纳策略改进 |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **配置优先级**：显式传入 config > config.json 持久化配置 > 默认值
+2. **并行保留顺序**：Promise.all 结果按原始索引重组，不破坏文本顺序
+3. **非空检查**：二次识别文本为空时不采纳，避免空文本覆盖原始结果
+4. **持久化限制**：RegExp 无法序列化，持久化只支持字符串规则（运行时仍支持 RegExp）
+
+**修复的 bug**：
+- v2.16 的 `startScreenMonitor` 回调中有一行 `ScreenMonitor.startMonitor(ScreenMonitor.getState().config, undefined)`，这会递归启动监控，导致多个监控循环同时运行。v2.19 移除了这行。
+
+**持久化配置示例**（config.json）：
+```json
+{
+  "vision": {
+    "monitor": {
+      "intervalMs": 2000,
+      "threshold": 5,
+      "cooldownMs": 5000,
+      "windowFilter": {
+        "mode": "whitelist",
+        "rules": ["Genshin Impact", "Star Rail"]
+      },
+      "autoStart": false
+    }
+  }
+}
+```
+
+- 状态：v2.19.0 已封板
+- 下一步：v2.20+ 视觉感知综合优化（缓存/性能/UI 反馈）
+
+---
+
+### v2.20.0 - 2026-07-20
+
+**里程碑：视觉感知综合优化（LRU 缓存 + 结果透传 + UI 反馈增强）**
+
+v2.5-v2.19 逐步构建了完整的视觉感知闭环，但每次图片分析都是"无记忆"的——相同图片重复发送给模型、OCR 结果中的二次识别和语言信息未透传到渲染层、UI 上看不到这些元信息。v2.20 补齐这些"最后一公里"。
+
+**为什么 v2.20 做综合优化**：
+1. **LRU 缓存**：屏幕监控帧差较小时前后帧几乎相同，重复调用模型浪费时间和钱。缓存让相同图片+相同 prompt 直接返回上次结果。
+2. **结果透传**：v2.17 的二次识别和 v2.18 的语言检测信息在 `OcrEnhancedResult` 中有，但 `VisionAnalysisResult` 没有——渲染层拿不到。
+3. **UI 反馈**：用户看不到 OCR 用的什么语言、有没有二次识别改进、是否命中缓存——信息不透明。
+
+**核心改动**：
+
+1. **Vision LRU 缓存** `src/main/vision/vision-cache.ts`（新增）
+   - **LRUCache**：Map 实现，删除+重新插入模拟 LRU 顺序
+   - **缓存 key**：`MD5(base64) + ":" + MD5(prompt)`，相同图片+不同 prompt 生成不同 key
+   - **TTL 5 分钟**：屏幕内容会变化，过期缓存自动失效
+   - **默认容量 50 条**：约 50 次分析结果，内存开销可控
+   - **公开 API**：`initVisionCache()` / `computeCacheKey()` / `getVisionCache()` / `setVisionCache()` / `clearVisionCache()` / `getVisionCacheStats()`
+   - **零依赖**：`crypto.createHash('md5')` 是 Node.js 内置
+
+2. **processVisionRequest 缓存集成**
+   - 单图时：先检查缓存，命中则跳过模型调用，直接返回（`fromCache: true`）
+   - 分析完成后：写入缓存（单图时）
+   - 多图时不缓存（组合 key 太复杂，收益低）
+
+3. **VisionAnalysisResult 扩展**
+   - `ocrRerecognize`：二次识别信息（rerecognizedCount / improvedCount）
+   - `ocrLanguage`：语言检测信息（code / autoDetected）
+   - `fromCache`：是否来自缓存命中
+
+4. **渲染层 UI 反馈增强**
+   - `Message` 类型新增 `ocrRerecognize` / `ocrLanguage` / `fromCache` 字段
+   - `MessageBubble` OCR 区域新增标签：
+     - **语言标签**：`chi_sim+eng ⚡`（⚡ 表示自动检测）
+     - **缓存标签**：`缓存`（蓝色）
+     - **二次识别标签**：`✓ 改进 2 行`（绿色）
+
+**v2.20.0 清单**：
+
+| 模块 | 文件 | 改动 |
+|------|------|------|
+| LRU 缓存 | `src/main/vision/vision-cache.ts` | 新增（LRUCache / init / get / set / clear / stats） |
+| 缓存集成 | `src/main/vision/vision-manager.ts` | processVisionRequest 缓存检查/写入 + VisionAnalysisResult 扩展 |
+| 类型 | `src/renderer/main/types.ts` | Message 新增 ocrRerecognize / ocrLanguage / fromCache |
+| UI | `src/renderer/main/MessageBubble.tsx` | 语言/缓存/二次识别标签 |
+| typecheck 3/3 | - | ✅ |
+
+**设计亮点**：
+1. **只缓存单图**：多图组合 key 复杂，缓存收益低（多图场景少见）
+2. **MD5 做 key**：固定 32 字符，Map 查找 O(1)，比比较 base64 快几个数量级
+3. **TTL 5 分钟**：屏幕监控场景合理——内容变化后 5 分钟内不会重复分析相同画面
+4. **UI 信息透明**：用户能看到语言、缓存、改进等元信息，对 OCR 结果更有信心
+
+**缓存统计使用**：
+- `getVisionCacheStats()` 返回 `{ size, hits, misses, hitRate }`
+- 可在 `/stats` 命令中展示缓存命中率
+- `/clear` 命令调用 `clearVisionCache()` 清空
+
+- 状态：v2.20.0 已封板
+- 下一步：v3.0.0 视觉感知 Phase 1 闭环（VERSION_SNAPSHOT）
+
+---
+
+### v3.0.0 - 2026-07-20
+
+**里程碑：视觉感知 Phase 1 闭环**
+
+从 v2.5 到 v2.20，历时 16 个小版本，视觉感知 Phase 1 完整闭环。纳西妲从"只能看用户上传的图片"进化到"主动观察屏幕变化、识别多语言文字、分析视频内容"。
+
+**Phase 1 四层能力**：
+
+| 层级 | 能力 | 版本 |
+|------|------|------|
+| 主动观察 | 屏幕实时监控 + 帧差检测 + 窗口过滤 + 规则持久化 | v2.16 - v2.19 |
+| 看动态内容 | 视频帧抽取 + 智能抽帧 + 多图 vision 分析 | v2.12 - v2.15 |
+| 主动截图 | 全屏 / 区域 / 多屏截图 + 选区 UI | v2.8 - v2.11 |
+| 被动接收 | 图片上传 + vision 分析 + 缩略图预览 | v2.5 - v2.6 |
+
+**OCR 增强链**：
+- 灰度化预处理（v2.7.1）→ 后处理五阶段（v2.10）→ 行级置信度（v2.14）→ 低置信度二次识别（v2.17）→ 多语言自动切换（v2.18）→ 并行优化（v2.19）
+
+**核心模块 8 个文件**：
+- `src/main/vision/vision-manager.ts`：视觉主管理器
+- `src/main/vision/ocr-postprocess.ts`：OCR 后处理
+- `src/main/vision/ocr-rerecognize.ts`：低置信度行二次识别
+- `src/main/vision/ocr-language-detect.ts`：多语言自动检测
+- `src/main/vision/vision-cache.ts`：LRU 缓存
+- `src/main/vision/screen-monitor.ts`：屏幕实时监控
+- `src/main/vision/capture-overlay.ts`：区域截图覆盖窗口
+- `src/main/vision/video-frame.ts`：视频帧抽取
+
+**设计原则**：
+1. **宁漏勿错**：OCR 后处理、二次识别、语言检测均遵循
+2. **无额外依赖**：截图用 Electron API、视频用系统 ffmpeg、OCR 用已有的 Tesseract.js、缓存用内置 crypto
+3. **渐进增强**：从被动到主动、从静态到动态、从单语言到多语言
+4. **资源自动清理**：截图/视频帧 TTL 过期清理
+5. **类型安全**：TS strict 模式，3/3 零错
+
+**Phase 2 规划**：
+- v3.1：监控规则可视化配置（设置界面）
+- v3.2：低置信度行用户可手动修正（反馈闭环）
+- v3.3：屏幕区域监控（只监控指定区域）
+- v3.4：OCR 表格识别（结构化输出）
+- v3.5：视觉记忆（重要画面自动存入记忆分片）
+
+**v3.0.0 版本快照**：详见 [VERSION_SNAPSHOT.md](./VERSION_SNAPSHOT.md)
+
+- 状态：v3.0.0 已封板 🎉
+- 下一步：v3.1+ 视觉感知 Phase 2 — 精细化增强
+
+---
+
 ## 技术栈版本
 
 ### 核心依赖
@@ -520,6 +1611,8 @@
 | pixi-live2d-display | 0.4.0 | Live2D 模型加载 |
 | Zod | 3.23.0 | Schema 校验 |
 | edge-tts | 7.2.8 | TTS 合成（Python） |
+| tesseract.js | ^7.0.0 | OCR 文字识别（v2.7） |
+| pngjs | ^7.0.0 | PNG 灰度化预处理（v2.7.1） |
 
 ### 本地模型
 

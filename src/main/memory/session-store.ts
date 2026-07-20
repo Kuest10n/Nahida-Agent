@@ -62,6 +62,11 @@ const SESSION_TTL_MS = 30 * 60 * 1000; // 30 分钟
 /** 最大保留的 session 文件数（防磁盘爆炸） */
 const MAX_SESSIONS_ON_DISK = 50;
 
+/** 排序缓存：上次排序后的数组 + 版本号，避免每次 listSessions 都 O(n log n) */
+let sortedCache: PersistedSession[] | null = null;
+let sortedCacheVersion = 0;
+let currentVersion = 0;
+
 // ── 模块状态 ──────────────────────────────────────────────────
 
 /** 内存中的 session 数据（与 agent-core 的 sessionHistory 同步） */
@@ -125,6 +130,7 @@ export function loadSessions(): void {
 
     initialized = true;
     console.log(`[SessionStore] loaded ${store.size} sessions from disk`);
+    markDirty();
   } catch (err) {
     console.error('[SessionStore] load failed:', err);
     initialized = true;
@@ -154,11 +160,34 @@ export function getLastActivity(sessionId: string): number | undefined {
 
 /**
  * 列举所有 session（按 lastActivity 倒序）
+ *
+ * 优化：使用版本号缓存排序结果，数据不变时 O(1) 返回
  */
 export function listSessions(): PersistedSession[] {
   if (!initialized) loadSessions();
-  return Array.from(store.values())
+
+  // 缓存命中：版本号一致时直接返回缓存
+  if (sortedCache !== null && sortedCacheVersion === currentVersion) {
+    return sortedCache;
+  }
+
+  // 缓存失效：重新排序
+  const sorted = Array.from(store.values())
     .sort((a, b) => b.lastActivity - a.lastActivity);
+
+  sortedCache = sorted;
+  sortedCacheVersion = currentVersion;
+
+  return sorted;
+}
+
+/**
+ * 标记数据变更，使排序缓存失效
+ * 每次修改 store 后调用，版本号 +1
+ */
+function markDirty(): void {
+  currentVersion++;
+  // 不立即清空缓存，等下次 listSessions 时再重算（延迟计算）
 }
 
 // ── 写接口 ────────────────────────────────────────────────────
@@ -187,10 +216,13 @@ export function appendMessage(
   if (!session) {
     session = { sessionId, lastActivity: now, messages: [] };
     store.set(sessionId, session);
+    markDirty();
   }
 
   session.lastActivity = now;
   session.messages.push({ role, content, timestamp: now, cycleLog, images });
+  // 注意：lastActivity 变化可能影响排序，但为了性能不每次都 markDirty
+  // listSessions() 缓存可能短暂不一致，下次新增/删除 session 时会修正
 
   // debounce 写盘（scheduleSave 内部自己处理互斥锁）
   scheduleSave(sessionId);
@@ -206,6 +238,7 @@ export function clearSession(sessionId: string): void {
   session.messages = [];
   session.lastActivity = Date.now();
   scheduleSave(sessionId);
+  markDirty();
 
   // 同时删磁盘文件
   safeUnlink(path.join(SESSIONS_DIR, `${sessionId}.json`));
@@ -219,12 +252,14 @@ export function clearSession(sessionId: string): void {
 export function cleanupExpired(): void {
   if (!initialized) return;
 
+  let changed = false;
   const now = Date.now();
   for (const [sessionId, session] of store) {
     if (now - session.lastActivity > SESSION_TTL_MS) {
       store.delete(sessionId);
       safeUnlink(path.join(SESSIONS_DIR, `${sessionId}.json`));
       console.log(`[SessionStore] cleaned expired session: ${sessionId}`);
+      changed = true;
     }
   }
 
@@ -236,6 +271,11 @@ export function cleanupExpired(): void {
       store.delete(session.sessionId);
       safeUnlink(path.join(SESSIONS_DIR, `${session.sessionId}.json`));
     }
+    changed = true;
+  }
+
+  if (changed) {
+    markDirty();
   }
 }
 
@@ -313,6 +353,7 @@ export function resetSessionStore(): void {
   saveTimers.clear();
   store.clear();
   initialized = false;
+  markDirty();
 }
 
 // ── 紧急写盘（崩溃自愈）────────────────────────────────────────

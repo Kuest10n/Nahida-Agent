@@ -143,6 +143,11 @@ export function willMistake(id: string): boolean {
   return result;
 }
 
+// 预编译正则：记忆模糊化
+const BLUR_YEAR_RE = /\b(\d{4})\b/g;
+const BLUR_TIME_RE = /\b(\d{1,2}):(\d{2})\b/g;
+const BLUR_DATE_RE = /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g;
+
 /**
  * 对记忆内容施加"模糊化"（记错效果）
  *
@@ -154,18 +159,18 @@ export function blurContent(content: string): string {
   let blurred = content;
 
   // 数字模糊化（年份、年龄等）
-  blurred = blurred.replace(/\b(\d{4})\b/g, (_m, year) => {
+  blurred = blurred.replace(BLUR_YEAR_RE, (_m, year) => {
     const offset = Math.floor(Math.random() * 5) - 2; // -2 ~ +2
     return String(Number(year) + offset);
   });
 
   // 具体时间模糊化
-  blurred = blurred.replace(/\b(\d{1,2}):(\d{2})\b/g, () => {
+  blurred = blurred.replace(BLUR_TIME_RE, () => {
     return '大概那个时间';
   });
 
   // 日期模糊化
-  blurred = blurred.replace(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g, () => {
+  blurred = blurred.replace(BLUR_DATE_RE, () => {
     return '很久以前';
   });
 

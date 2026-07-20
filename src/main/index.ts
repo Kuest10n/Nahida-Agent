@@ -4,7 +4,7 @@ import { setupIpcHandlers } from './ipc/handlers';
 import { warmupModel } from './agent/agent-core';
 import { registerBuiltinTools } from './tools/builtin';
 import { connectConfiguredMcpServers } from './mcp/mcp-client';
-import { startDreamMonitor } from './soul/dream';
+import { startDreamMonitor, stopDreamMonitor } from './soul/dream';
 import { initSTT } from './voice/stt';
 import { initWakeup } from './voice/voice-wakeup';
 import { initShortcuts, unregisterAll as unregisterAllShortcuts } from './hotkeys/shortcut-manager';
@@ -21,15 +21,15 @@ import { PerceptionModule } from './perception';
 import { ReviewLayer } from './agent/review-layer';
 import { proactiveQueue } from './agent/proactive-queue';
 import { createTray, destroyTray, updateTrayStatus } from './tray/tray-manager';
-import { registerShortcuts, unregisterShortcuts } from './tray/shortcuts';
 import { initPersonalityManager } from './memory/personality-manager';
 import { emergencyFlush, loadSessions } from './memory/session-store';
 import { initGroupChat } from './agent/group-chat/group-chat';
 import { healthMonitor, createHttpProbe, createNetworkProbe } from './health/health';
 import { getConfig, getOllamaBaseUrl, loadUserConfigFromDisk } from './config/config';
 import { initMaturity } from './agent/maturity';
-import { initTokenUsage } from './agent/token-usage';
+import { initTokenUsage, flushTokenUsage } from './agent/token-usage';
 import { cleanupAllServices } from './python/python-manager';
+import { registerRegionOverlayHandlers } from './vision/capture-overlay';
 
 // 单例窗口管理器 + Perception 模块 + 主动开口 reviewer
 const windowMgr = new WindowManager();
@@ -136,12 +136,10 @@ app.whenReady().then(() => {
   if (windowMgr.mainWindow && windowMgr.live2dWindow) {
     setupIpcHandlers(windowMgr.mainWindow, windowMgr.live2dWindow);
 
-    createTray({
-      mainWindow: windowMgr.mainWindow,
-      live2dWindow: windowMgr.live2dWindow,
-    });
+    // v2.9: 注册区域截图覆盖窗口 IPC 监听
+    registerRegionOverlayHandlers();
 
-    registerShortcuts({
+    createTray({
       mainWindow: windowMgr.mainWindow,
       live2dWindow: windowMgr.live2dWindow,
     });
@@ -234,11 +232,13 @@ app.on('before-quit', () => {
 
 app.on('window-all-closed', () => {
   perception.stop();
+  healthMonitor.stop();
+  stopDreamMonitor();
   destroyTray();
-  unregisterShortcuts();
-  unregisterAllShortcuts(); // v1.8: 注销全局快捷键
+  unregisterAllShortcuts();
   // 退出前最后再刷一次
   emergencyFlush();
+  flushTokenUsage();
   // 清理所有 Python 子进程（防僵尸）
   cleanupAllServices();
   if (process.platform !== 'darwin') {

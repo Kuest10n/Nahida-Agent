@@ -26,7 +26,9 @@ import { startSTT, stopSTT, receiveResult, switchBackend, getSTTState, type STTR
 import { startWakeup, stopWakeup, toggleWakeup, getWakeupState } from '../voice/voice-wakeup';
 import { exportConversation, getDefaultExportPath, type ExportFormat } from '../memory/exporter';
 import { appendMessage } from '../memory/session-store';
-import { saveUploadedImage, processVisionRequest } from '../vision/vision-manager';
+import { saveUploadedImage, processVisionRequest, processVideoRequest, startScreenMonitor, stopScreenMonitor, getScreenMonitorState } from '../vision/vision-manager';
+import { captureScreen, captureAndAnalyze, captureRegion, listDisplays, formatDisplayList } from '../vision/screenshot';
+import { showRegionOverlay } from '../vision/capture-overlay';
 import { getPomodoroState } from '../tools/pomodoro';
 import { getTool } from '../tools/registry';
 import { buildPackage } from '../community/package-builder';
@@ -59,9 +61,9 @@ const ttsScheduler = new TtsScheduler(new GptSoVitsAdapter());
 // ── 命令意图的预设回复（不走模型，省 token） ──
 const COMMAND_RESPONSES: Record<CommandType, string> = {
   '/clear': '（花冠微垂，指尖轻拂虚空屏）……心识印记已清空，新的对话开始啦。',
-  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats /switch-persona /balance /hat /pomodoro /package /wakeup /group /multimodal',
+  '/help': '（指尖虚空拨动）……可用命令：/clear /help /switch-model /stats /switch-persona /balance /hat /pomodoro /package /wakeup /group /multimodal /screenshot /video /monitor',
   '/switch-model': '（虚空屏微光一闪）……模型切换功能还在生长中，再等等吧。',
-  '/stats': '（轻托腮）……统计功能还在生长中，再等等吧。',
+  '/stats': '（轻托腮）……统计功能已就绪，试试 `/stats` 查看 token 消耗、遗忘曲线、梦境状态和元认知统计吧。',
   '/switch-persona': '（花冠微颤）……人格切换功能已就绪，试试 /switch-persona nahida 或 /switch-persona ti-bao 吧。',
   '/balance': '（指尖轻点虚空屏）……余额查询正在路上。',
   '/hat': '（花冠轻转）……六顶帽模式已切换。',
@@ -73,6 +75,9 @@ const COMMAND_RESPONSES: Record<CommandType, string> = {
   '/wakeup': '（花冠轻转）……语音唤醒模式。',
   '/group': '（花冠轻转）……群聊模式。',
   '/multimodal': '（花冠轻转，虚空屏展开）……全模态闭环已就绪。在输入框旁边的📎按钮上传图片，或者直接粘贴/拖拽图片，我就能看到啦。需要配置 Vision 模型（如 qwen2-vl）才能使用图像理解功能哦。',
+  '/screenshot': '（花冠轻转，虚空屏微光一闪）……屏幕截图模式已就绪。试试：\n`/screenshot` 截取主屏并分析\n`/screenshot region` 框选屏幕区域截图（支持多屏）\n`/screenshot list` 列出可用显示器\n`/screenshot <显示器ID>` 截取指定显示器\n`/screenshot 看看这个报错` 截屏 + 自定义提问',
+  '/video': '（花冠微垂，凝神注视）……视频分析模式已就绪。试试：\n`/video` 上传视频文件并分析\n`/video 这个视频讲了什么` 上传视频 + 自定义提问',
+  '/monitor': '（花冠微垂）……屏幕监控命令：\n`/monitor start` 开始监控（定时截图，画面变化超过 5% 时自动分析）\n`/monitor stop` 停止监控\n`/monitor status` 查询状态',
 };
 
 // T5 Agent 编排：路由层 → generateResponse → 四审 → live2d action
@@ -581,6 +586,281 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
           } else {
             fullOutput = '（花冠轻转）……群聊命令：\n`/group create` 创建\n`/group list` 列表\n`/group info` 详情\n`/group add` 添加成员\n`/group remove` 移除成员\n`/group token` 设置限制\n`/group send` 发送消息';
           }
+        } else if (routeResult.command === '/screenshot') {
+          // /screenshot：屏幕截图 + vision 分析（v2.8.0 视觉感知深度）
+          const trimmed = message.trim();
+          const argPart = trimmed.replace('/screenshot', '').trim();
+
+          if (argPart === 'list') {
+            // 列出所有显示器
+            fullOutput = formatDisplayList();
+            mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+              delta: fullOutput,
+              finishReason: 'stop',
+              sessionId,
+              timestamp: Date.now(),
+            });
+          } else if (argPart === 'region') {
+            // v2.11: 区域截图模式 — 多屏版
+            const displays = listDisplays();
+            fullOutput = displays.length > 1
+              ? `（花冠微垂）……检测到 ${displays.length} 个显示器，区域截图窗口已在所有屏幕打开。请在任意屏幕上拖动鼠标框选要分析的区域，按 ESC 取消。`
+              : '（花冠微垂）……区域截图窗口已打开，请拖动鼠标框选要分析的屏幕区域，按 ESC 取消。';
+            mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+              delta: fullOutput,
+              finishReason: 'stop',
+              sessionId,
+              timestamp: Date.now(),
+            });
+
+            // 显示覆盖窗口，等待用户选区
+            const region = await showRegionOverlay();
+            if (!region) {
+              // 用户取消
+              const cancelMsg = '（花冠微垂）……区域截图已取消。';
+              mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                delta: cancelMsg,
+                finishReason: 'stop',
+                sessionId,
+                timestamp: Date.now(),
+              });
+            } else {
+              // 用户选好区域，按 displayId 截图 + 裁剪
+              const regionResult = await captureRegion(
+                { x: region.x, y: region.y, width: region.width, height: region.height },
+                region.displayId,
+              );
+              if (!regionResult.ok || !regionResult.base64) {
+                const errMsg = `（花冠微垂）……区域截图失败，${regionResult.error ?? '未知错误'}`;
+                mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                  delta: errMsg,
+                  finishReason: 'stop',
+                  sessionId,
+                  timestamp: Date.now(),
+                });
+              } else {
+                // 流式推送 vision 分析
+                const visionResult = await processVisionRequest(
+                  [regionResult.base64],
+                  '请描述这张截图的内容。',
+                  (delta: string, done: boolean) => {
+                    mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                      delta,
+                      finishReason: done ? 'stop' : undefined,
+                      sessionId,
+                      timestamp: Date.now(),
+                    });
+                  },
+                );
+                fullOutput = visionResult.description;
+
+                // 推送 vision 结果
+                if (regionResult.path) {
+                  mainWindow.webContents.send(IpcChannel.VISION_RESULT, {
+                    sessionId,
+                    description: visionResult.description,
+                    ocrText: visionResult.ocrText,
+                    imagePaths: [regionResult.path],
+                    timestamp: Date.now(),
+                  });
+                  appendMessage(sessionId, 'user', '/screenshot region', undefined, [regionResult.path]);
+                }
+                appendMessage(sessionId, 'assistant', fullOutput, undefined);
+
+                // Live2D + TTS 联动
+                const emotionEnum = resolveActionEmotion(fullOutput) ?? NahidaEmotion.Greeting;
+                const expression = resolveExpression(emotionEnum);
+                live2dWindow.webContents.send(IpcChannel.LIVE2D_ACTION, {
+                  actionTag: fullOutput.match(ACTION_BRACKET_RE)?.[0] ?? '',
+                  expression,
+                  priority: 0,
+                });
+
+                const ttsText = stripActionTags(fullOutput);
+                if (ttsText.trim()) {
+                  void ttsScheduler.enqueue({
+                    text: ttsText,
+                    emotion: emotionEnum,
+                    sessionId,
+                  }).then((ttsResult) => {
+                    if (!ttsResult) return;
+                    mainWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+                      chunkIndex: 0,
+                      totalChunks: 1,
+                      audioBase64: ttsResult.audioBase64,
+                      voiceType: emotionEnum,
+                    });
+                    live2dWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+                      chunkIndex: 0,
+                      totalChunks: 1,
+                      audioBase64: ttsResult.audioBase64,
+                      voiceType: emotionEnum,
+                    });
+                  });
+                }
+              }
+            }
+          } else if (argPart === '' || argPart === 'help') {
+            // 帮助
+            fullOutput = COMMAND_RESPONSES['/screenshot'];
+            mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+              delta: fullOutput,
+              finishReason: 'stop',
+              sessionId,
+              timestamp: Date.now(),
+            });
+          } else {
+            // 判断参数是显示器 ID 还是自定义提问
+            const displays = listDisplays();
+            const matchedDisplay = displays.find(d => d.id === argPart);
+
+            const customPrompt = matchedDisplay ? '请描述这张截图的内容。' : argPart;
+            const displayId = matchedDisplay?.id;
+
+            // 截屏 + vision 分析
+            if (matchedDisplay) {
+              // 指定显示器
+              const screenshotResult = await captureScreen({ displayId });
+              if (!screenshotResult.ok || !screenshotResult.base64) {
+                fullOutput = `（花冠微垂）……截屏失败，${screenshotResult.error ?? '未知错误'}`;
+                mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                  delta: fullOutput,
+                  finishReason: 'stop',
+                  sessionId,
+                  timestamp: Date.now(),
+                });
+              } else {
+                // 流式推送 vision 分析
+                const visionResult = await processVisionRequest(
+                  [screenshotResult.base64],
+                  customPrompt,
+                  (delta: string, done: boolean) => {
+                    mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                      delta,
+                      finishReason: done ? 'stop' : undefined,
+                      sessionId,
+                      timestamp: Date.now(),
+                    });
+                  },
+                );
+                fullOutput = visionResult.description;
+
+                // 推送 vision 结果
+                mainWindow.webContents.send(IpcChannel.VISION_RESULT, {
+                  sessionId,
+                  description: visionResult.description,
+                  ocrText: visionResult.ocrText,
+                  imagePaths: visionResult.imagePaths,
+                  timestamp: Date.now(),
+                });
+
+                appendMessage(sessionId, 'user', trimmed, undefined, visionResult.imagePaths);
+                appendMessage(sessionId, 'assistant', fullOutput, undefined);
+              }
+            } else {
+              // 自定义提问，截主屏
+              const result = await captureAndAnalyze(customPrompt, (delta: string, done: boolean) => {
+                mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                  delta,
+                  finishReason: done ? 'stop' : undefined,
+                  sessionId,
+                  timestamp: Date.now(),
+                });
+              });
+              fullOutput = result.description;
+
+              if (result.screenshot.ok && result.screenshot.path) {
+                // 推送 vision 结果
+                mainWindow.webContents.send(IpcChannel.VISION_RESULT, {
+                  sessionId,
+                  description: result.description,
+                  ocrText: result.ocrText,
+                  imagePaths: [result.screenshot.path],
+                  timestamp: Date.now(),
+                });
+
+                appendMessage(sessionId, 'user', trimmed, undefined, [result.screenshot.path]);
+                appendMessage(sessionId, 'assistant', fullOutput, undefined);
+              }
+            }
+
+            // Live2D 动作 + TTS（与 vision 路径一致）
+            const emotionEnum = resolveActionEmotion(fullOutput) ?? NahidaEmotion.Greeting;
+            const expression = resolveExpression(emotionEnum);
+            live2dWindow.webContents.send(IpcChannel.LIVE2D_ACTION, {
+              actionTag: fullOutput.match(ACTION_BRACKET_RE)?.[0] ?? '',
+              expression,
+              priority: 0,
+            });
+
+            const ttsText = stripActionTags(fullOutput);
+            if (ttsText.trim()) {
+              void ttsScheduler.enqueue({
+                text: ttsText,
+                emotion: emotionEnum,
+                sessionId,
+              }).then((ttsResult) => {
+                if (!ttsResult) return;
+                mainWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+                  chunkIndex: 0,
+                  totalChunks: 1,
+                  audioBase64: ttsResult.audioBase64,
+                  voiceType: emotionEnum,
+                });
+                live2dWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+                  chunkIndex: 0,
+                  totalChunks: 1,
+                  audioBase64: ttsResult.audioBase64,
+                  voiceType: emotionEnum,
+                });
+              });
+            }
+          }
+        } else if (routeResult.command === '/monitor') {
+          // v2.16: 屏幕实时监控（定时截图 + 帧差检测 + 自动 vision 分析）
+          const trimmed = message.trim();
+          const argPart = trimmed.replace('/monitor', '').trim();
+
+          if (argPart === 'start') {
+            // 开始监控
+            const state = startScreenMonitor();
+            fullOutput = `（花冠轻转，虚空屏微光流转）……屏幕监控已启动。\n间隔：${state.config.intervalMs ?? 2000}ms\n帧差阈值：${state.config.threshold ?? 5}%\n自动分析：${state.config.autoAnalyze ?? true ? '开启' : '关闭'}\n\n画面变化超过阈值时，我会自动分析屏幕内容。用 \`/monitor stop\` 停止监控。`;
+            mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+              delta: fullOutput,
+              finishReason: 'stop',
+              sessionId,
+              timestamp: Date.now(),
+            });
+          } else if (argPart === 'stop') {
+            // 停止监控
+            const state = stopScreenMonitor();
+            fullOutput = `（花冠微垂）……屏幕监控已停止。\n共捕获 ${state.frameCount} 帧，检测到 ${state.changeCount} 次画面变化。`;
+            mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+              delta: fullOutput,
+              finishReason: 'stop',
+              sessionId,
+              timestamp: Date.now(),
+            });
+          } else if (argPart === 'status') {
+            // 查询状态
+            const state = getScreenMonitorState();
+            fullOutput = `（轻托腮）……屏幕监控${state.isActive ? '运行中' : '未运行'}。\n${state.isActive ? `已捕获 ${state.frameCount} 帧，检测到 ${state.changeCount} 次变化` : ''}`;
+            mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+              delta: fullOutput,
+              finishReason: 'stop',
+              sessionId,
+              timestamp: Date.now(),
+            });
+          } else {
+            // 帮助
+            fullOutput = '（花冠微垂）……屏幕监控命令：\n`/monitor start` 开始监控（定时截图，画面变化超过 5% 时自动分析）\n`/monitor stop` 停止监控\n`/monitor status` 查询状态\n\n默认配置：间隔 2 秒，帧差阈值 5%，自动分析开启。';
+            mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+              delta: fullOutput,
+              finishReason: 'stop',
+              sessionId,
+              timestamp: Date.now(),
+            });
+          }
         } else {
           fullOutput = COMMAND_RESPONSES[routeResult.command ?? '/help'];
       }
@@ -625,7 +905,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
       const emotionEnum = resolveActionEmotion(fullOutput) ?? NahidaEmotion.Greeting;
       const expression = resolveExpression(emotionEnum);
       live2dWindow.webContents.send(IpcChannel.LIVE2D_ACTION, {
-        actionTag: fullOutput.match(/[（(]([^）)]{1,20})[）)]/)?.[0] ?? '',
+        actionTag: fullOutput.match(ACTION_BRACKET_RE)?.[0] ?? '',
         expression,
         priority: 0,
       });
@@ -985,11 +1265,144 @@ ${payload.content}
       sessionId,
       description: result.description,
       ocrText: result.ocrText,
+      ocrConfidence: result.ocrConfidence,
       imagePaths: result.imagePaths,
       timestamp: Date.now(),
     });
 
     return result;
+  });
+
+  // v2.12: 视频上传 + 分析
+  registerValidatedHandler(IpcChannel.VIDEO_UPLOAD, async (event, payload) => {
+    const params = payload as { filePath: string; fileName: string; fileSize: number; sessionId: string; prompt?: string };
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const sessionId = params.sessionId ?? 'default';
+    const prompt = params.prompt?.trim() || '请描述这段视频的主要内容。';
+
+    // 先告诉用户正在处理
+    win?.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+      delta: `（花冠微垂，凝神注视）……我正在看这段视频「${params.fileName}」，稍等片刻哦~`,
+      finishReason: undefined,
+      sessionId,
+      timestamp: Date.now(),
+    });
+
+    const result = await processVideoRequest(
+      params.filePath,
+      prompt,
+      (delta: string, done: boolean) => {
+        win?.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+          delta,
+          finishReason: done ? 'stop' : undefined,
+          sessionId,
+          timestamp: Date.now(),
+        });
+      },
+    );
+
+    if (result.ok) {
+      // 推送视频分析结果
+      win?.webContents.send(IpcChannel.VIDEO_RESULT, {
+        sessionId,
+        description: result.description,
+        frameCount: result.frameCount,
+        duration: result.duration,
+        imagePaths: result.imagePaths,
+        strategy: result.strategy,
+        ocrText: result.ocrText,
+        ocrConfidence: result.ocrConfidence,
+        timestamp: Date.now(),
+      });
+
+      // 持久化消息
+      appendMessage(sessionId, 'user', `[视频] ${params.fileName}：${prompt}`, undefined, result.imagePaths);
+      appendMessage(sessionId, 'assistant', result.description, undefined);
+
+      // Live2D + TTS 联动
+      const emotionEnum = resolveActionEmotion(result.description) ?? NahidaEmotion.Greeting;
+      const expression = resolveExpression(emotionEnum);
+      live2dWindow.webContents.send(IpcChannel.LIVE2D_ACTION, {
+        actionTag: result.description.match(ACTION_BRACKET_RE)?.[0] ?? '',
+        expression,
+        priority: 0,
+      });
+
+      const ttsText = stripActionTags(result.description);
+      if (ttsText.trim()) {
+        void ttsScheduler.enqueue({
+          text: ttsText,
+          emotion: emotionEnum,
+          sessionId,
+        }).then((ttsResult) => {
+          if (!ttsResult) return;
+          win?.webContents.send(IpcChannel.TTS_CHUNK, {
+            chunkIndex: 0,
+            totalChunks: 1,
+            audioBase64: ttsResult.audioBase64,
+            voiceType: emotionEnum,
+          });
+          live2dWindow.webContents.send(IpcChannel.TTS_CHUNK, {
+            chunkIndex: 0,
+            totalChunks: 1,
+            audioBase64: ttsResult.audioBase64,
+            voiceType: emotionEnum,
+          });
+        });
+      }
+    }
+
+    return result;
+  });
+
+  // v2.16: 屏幕实时监控
+  registerValidatedHandler(IpcChannel.MONITOR_START, async (event, payload) => {
+    const params = payload as { intervalMs?: number; threshold?: number; autoAnalyze?: boolean };
+    const win = BrowserWindow.fromWebContents(event.sender);
+
+    const state = startScreenMonitor(
+      {
+        intervalMs: params.intervalMs,
+        threshold: params.threshold,
+        autoAnalyze: params.autoAnalyze,
+      },
+      (result) => {
+        // 监控分析结果推送
+        win?.webContents.send(IpcChannel.VISION_RESULT, {
+          sessionId: 'monitor',
+          description: result.description,
+          ocrText: result.ocrText,
+          ocrConfidence: result.ocrConfidence,
+          imagePaths: result.imagePaths,
+          timestamp: Date.now(),
+        });
+      },
+    );
+
+    win?.webContents.send(IpcChannel.MONITOR_FRAME, {
+      type: 'started',
+      state,
+      timestamp: Date.now(),
+    });
+
+    return state;
+  });
+
+  registerValidatedHandler(IpcChannel.MONITOR_STOP, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const state = stopScreenMonitor();
+
+    win?.webContents.send(IpcChannel.MONITOR_FRAME, {
+      type: 'stopped',
+      state,
+      timestamp: Date.now(),
+    });
+
+    return state;
+  });
+
+  registerValidatedHandler(IpcChannel.MONITOR_STATE, async () => {
+    return getScreenMonitorState();
   });
 }
 
@@ -1005,9 +1418,16 @@ ${payload.content}
  *   "嗯...（铃铛轻响）好的[emotion:happy]"
  *     → "嗯...好的"
  */
+// 预编译正则：动作括号提取（供 Live2D 驱动）
+const ACTION_BRACKET_RE = /[（(]([^）)]{1,20})[）)]/;
+
+// 预编译正则：TTS 文本清洗（去除动作括号和情绪标签）
+const TTS_ACTION_RE = /（[^）]*）/g;
+const TTS_EMOTION_RE = /\[emotion:[^\]]*\]/g;
+
 function stripActionTags(text: string): string {
   return text
-    .replace(/（[^）]*）/g, '')   // 中文括号及内容
-    .replace(/\[emotion:[^\]]*\]/g, '')  // 情绪标签
+    .replace(TTS_ACTION_RE, '')   // 中文括号及内容
+    .replace(TTS_EMOTION_RE, '')  // 情绪标签
     .trim();
 }

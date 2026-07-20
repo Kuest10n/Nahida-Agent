@@ -1,0 +1,40 @@
+appId: com.nahida.agent
+productName: Nahida Agent
+npmRebuild: false
+buildDependenciesFromSource: false
+publish: null
+directories:
+  output: release
+  buildResources: assets
+files:
+  - 'dist/main/**/*'
+  - 'dist/preload/**/*'
+  - 'dist/renderer/**/*'
+  - 'assets/**/*'
+  - 'memory/**/*'
+  - 'node_modules/**/*'
+  - 'package.json'
+  - '!node_modules/.bin/**'
+  - '!node_modules/**/*.md'
+  - '!node_modules/**/*.map'
+asar: true
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  requestedExecutionLevel: asInvoker
+  verifyUpdateCodeSignature: false
+  signingHashAlgorithms: []
+forceCodeSigning: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Nahida Agent
+portable:
+  artifactName: Nahida-Agent-Portable-${version}.exe

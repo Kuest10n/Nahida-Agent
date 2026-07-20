@@ -231,24 +231,25 @@ const webFetchTool: ToolDefinition = {
  * 只做基础处理：去标签、解码实体、压缩空白。
  * 不引入 cheerio/jsdom，保持依赖轻量。
  */
+const RE_SCRIPT_STYLE = /<(script|style|noscript)[^>]*>[\s\S]*?<\/\1>/gi;
+const RE_BLOCK_TAGS = /<(\/?)(p|div|br|h[1-6]|li|tr|hr)[^>]*>/gi;
+const RE_ANY_TAG = /<[^>]+>/g;
+const RE_MULTI_SPACE = /[ \t]+/g;
+const RE_MULTI_NEWLINE = /\n{3,}/g;
+
 function htmlToText(html: string): string {
   return html
-    // 去 script/style/noscript 内容
-    .replace(/<(script|style|noscript)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    // 块级标签转换行
-    .replace(/<(\/?)(p|div|br|h[1-6]|li|tr|hr)[^>]*>/gi, '\n')
-    // 去所有其他标签
-    .replace(/<[^>]+>/g, '')
-    // 解码常见 HTML 实体
+    .replace(RE_SCRIPT_STYLE, '')
+    .replace(RE_BLOCK_TAGS, '\n')
+    .replace(RE_ANY_TAG, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    // 压缩多余空白
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(RE_MULTI_SPACE, ' ')
+    .replace(RE_MULTI_NEWLINE, '\n\n')
     .trim();
 }
 

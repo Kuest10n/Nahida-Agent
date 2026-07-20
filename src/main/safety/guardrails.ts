@@ -169,14 +169,20 @@ export class ToolGuardrails {
    *
    * @returns 修复后的字符串；如果无法修复返回 null
    */
+  // 预编译正则：JSON 修复
+  static readonly RE_CODE_BLOCK_START = /^```(?:json)?\s*/i;
+  static readonly RE_CODE_BLOCK_END = /\s*```$/i;
+  static readonly RE_TRAILING_COMMA = /,\s*([}\]])/g;
+  static readonly RE_UNQUOTED_KEY = /([{,]\s*)([a-zA-Z_][\w-]*)\s*:/g;
+
   static repairJson(raw: string): string | null {
     let s = raw.trim();
 
     // 去掉 markdown 代码块包裹
-    s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    s = s.replace(this.RE_CODE_BLOCK_START, '').replace(this.RE_CODE_BLOCK_END, '');
 
     // 去尾逗号：}", 或 ",} → "} / "}
-    s = s.replace(/,\s*([}\]])/g, '$1');
+    s = s.replace(this.RE_TRAILING_COMMA, '$1');
 
     // 单引号 → 双引号（安全版本：逐字符扫描，避免破坏转义）
     s = this.fixSingleQuotes(s);
@@ -184,7 +190,7 @@ export class ToolGuardrails {
     // 缺引号键：{query: → {"query":
     // 匹配 { 或 , 后面跟 标识符: 但标识符没被引号包裹
     // 注意：跳过已被双引号包裹的键
-    s = s.replace(/([{,]\s*)([a-zA-Z_][\w-]*)\s*:/g, '$1"$2":');
+    s = s.replace(this.RE_UNQUOTED_KEY, '$1"$2":');
 
     // 验证修复后是否合法
     try {

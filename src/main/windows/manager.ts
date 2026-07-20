@@ -3,27 +3,30 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 /**
+ * 判断是否在 asar 打包环境中运行
+ */
+function isPackaged(): boolean {
+  return app.isPackaged || __dirname.includes('app.asar');
+}
+
+/**
  * 计算预加载脚本路径
  *
- * 构建后目录结构：
- *   dist/
- *     main/main/index.js          (主进程入口)
- *     main/main/windows/manager.js (本文件)
- *     preload/index.js            (预加载脚本，rootDir=src 平铺)
- *     renderer/main/index.html    (聊天窗口 HTML)
- *     renderer/live2d/index.html  (Live2D 窗口 HTML)
+ * 开发期：__dirname = dist/main/main/windows/
+ *   ../../../preload/index.js → dist/preload/index.js
  *
- * __dirname = dist/main/main/windows/
- * ../../../preload/index.js → dist/preload/index.js ✅
+ * 打包后 (asar)：__dirname = app.asar/dist/main/main/windows/
+ *   直接用 app.getAppPath() + dist/preload/index.js
  */
 function getPreloadPath(): string {
-  const primary = path.join(__dirname, '../../../preload/index.js');
-  // 兜底：开发期 dist 结构若被改动，回退到 dist/preload/preload/index.js
-  if (!fs.existsSync(primary)) {
-    const fallback = path.join(__dirname, '../../../preload/preload/index.js');
-    if (fs.existsSync(fallback)) return fallback;
+  if (isPackaged()) {
+    const packagedPath = path.join(app.getAppPath(), 'dist', 'preload', 'index.js');
+    if (fs.existsSync(packagedPath)) return packagedPath;
   }
-  return primary;
+  const primary = path.join(__dirname, '../../../preload/index.js');
+  if (fs.existsSync(primary)) return primary;
+  const fallback = path.join(__dirname, '../../../preload/preload/index.js');
+  return fallback;
 }
 
 /**
@@ -33,8 +36,9 @@ function getPreloadPath(): string {
  * @returns 完整文件路径
  */
 function getRendererHtmlPath(page: 'main' | 'live2d'): string {
-  // __dirname = dist/main/main/windows/
-  // ../../renderer/${page}/index.html → dist/renderer/${page}/index.html
+  if (isPackaged()) {
+    return path.join(app.getAppPath(), 'dist', 'renderer', page, 'index.html');
+  }
   return path.join(__dirname, `../../renderer/${page}/index.html`);
 }
 

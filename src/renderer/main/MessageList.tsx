@@ -3,6 +3,31 @@ import type { Message } from './types';
 import { MessageBubble } from './MessageBubble';
 import { StatsCard } from './StatsCard';
 
+/** 样式常量（模块级，避免每次渲染创建新对象） */
+const EMPTY_STATE_STYLE: React.CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: '#81c784',
+  fontSize: 14,
+};
+
+const EMPTY_CONTENT_STYLE: React.CSSProperties = {
+  textAlign: 'center',
+};
+
+const EMPTY_ICON_STYLE: React.CSSProperties = {
+  fontSize: 24,
+  marginBottom: 8,
+};
+
+const LIST_STYLE: React.CSSProperties = {
+  flex: 1,
+  overflow: 'auto',
+  padding: '12px 16px',
+};
+
 /**
  * 消息列表组件
  *
@@ -22,18 +47,9 @@ export const MessageList: React.FC<{ messages: Message[] }> = ({ messages }) => 
 
   if (messages.length === 0) {
     return (
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#81c784',
-          fontSize: 14,
-        }}
-      >
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 24, marginBottom: 8 }}>🌿</div>
+      <div style={EMPTY_STATE_STYLE}>
+        <div style={EMPTY_CONTENT_STYLE}>
+          <div style={EMPTY_ICON_STYLE}>🌿</div>
           <div>向纳西妲打个招呼吧</div>
         </div>
       </div>
@@ -41,14 +57,7 @@ export const MessageList: React.FC<{ messages: Message[] }> = ({ messages }) => 
   }
 
   return (
-    <div
-      ref={listRef}
-      style={{
-        flex: 1,
-        overflow: 'auto',
-        padding: '12px 16px',
-      }}
-    >
+    <div ref={listRef} style={LIST_STYLE}>
       {messages.map(msg => {
         // 识别统计类消息，渲染图表卡片
         if (msg.role === 'assistant' && msg.content.startsWith('📊 Token 使用统计')) {

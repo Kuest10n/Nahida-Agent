@@ -9,7 +9,29 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@main/*": ["src/main/*"],
+      "@renderer/*": ["src/renderer/*"],
+      "@memory/*": ["src/main/memory/*"],
+      "@tools/*": ["src/main/tools/*"],
+      "@agent/*": ["src/main/agent/*"],
+      "@ipc/*": ["src/main/ipc/*"],
+      "@router/*": ["src/main/router/*"],
+      "@vision/*": ["src/main/vision/*"],
+      "@perception/*": ["src/main/perception/*"],
+      "@health/*": ["src/main/health/*"],
+      "@soul/*": ["src/main/soul/*"],
+      "@tts/*": ["src/main/tts/*"],
+      "@plugins/*": ["src/main/plugins/*"],
+      "@api/*": ["src/main/api/*"],
+      "@community/*": ["src/main/community/*"],
+      "@mcp/*": ["src/main/mcp/*"],
+      "@rag/*": ["src/main/rag/*"],
+      "@safety/*": ["src/main/safety/*"],
+      "@python/*": ["src/main/python/*"],
+      "@hotkeys/*": ["src/main/hotkeys/*"],
+      "@tray/*": ["src/main/tray/*"],
+      "@config/*": ["src/main/config/*"]
     }
   }
 }

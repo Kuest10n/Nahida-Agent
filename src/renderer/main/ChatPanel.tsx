@@ -5,10 +5,49 @@ import { StatusBar } from './StatusBar';
 import { Sidebar } from './Sidebar';
 import { SettingsModal } from './SettingsModal';
 import { FeedbackModal } from './FeedbackModal';
-import type { Message } from './types';
+import type { Message, ImageAttachment } from './types';
 import { generateMessageId, extractActionTag } from './types';
 import { IpcChannel } from '../../shared/types/ipc';
 import type { Config } from '../../shared/types/config';
+
+/** 样式常量（模块级，避免每次渲染创建新对象） */
+const ROOT_STYLE: React.CSSProperties = {
+  height: '100%',
+  display: 'flex',
+  flexDirection: 'row',
+  background: 'linear-gradient(180deg, #f3f7f1 0%, #e8f1f4 100%)',
+  color: '#2e3a32',
+  fontFamily: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
+};
+
+const MAIN_CONTENT_STYLE: React.CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  minWidth: 0,
+};
+
+const HEADER_STYLE: React.CSSProperties = {
+  padding: '10px 18px',
+  borderBottom: '1px solid #d9e4d4',
+  background: 'rgba(255, 255, 255, 0.7)',
+  backdropFilter: 'blur(8px)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  boxShadow: '0 1px 3px rgba(46, 125, 50, 0.04)',
+};
+
+const HEADER_TITLE_STYLE: React.CSSProperties = {
+  fontSize: 14,
+  color: '#2e7d32',
+  fontWeight: 600,
+};
+
+const HEADER_SUBTITLE_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  color: '#7a8d72',
+};
 
 interface Personality {
   id: string;
@@ -122,26 +161,105 @@ export const ChatPanel: React.FC = () => {
     return () => { cleanup?.(); };
   }, []);
 
+  // v2.15: 监听 vision 结果（图片分析 + OCR + 置信度），附加到当前 streaming 消息
+  useEffect(() => {
+    const cleanup = window.nahidaAPI?.on('vision:result', (payload) => {
+      const data = payload as {
+        sessionId?: string;
+        ocrText?: string;
+        ocrConfidence?: { average: number; minimum: number; lowCount: number; totalLines: number };
+      };
+      if (!data.ocrText) return;
+      setMessages(prev => prev.map(m =>
+        m.isStreaming
+          ? {
+              ...m,
+              ocrText: data.ocrText,
+              ocrConfidence: data.ocrConfidence,
+            }
+          : m
+      ));
+    });
+    return () => { cleanup?.(); };
+  }, []);
+
+  // v2.15: 监听 video 结果（视频分析 + OCR + 置信度 + 元信息）
+  useEffect(() => {
+    const cleanup = window.nahidaAPI?.on('video:result', (payload) => {
+      const data = payload as {
+        sessionId?: string;
+        ocrText?: string;
+        ocrConfidence?: { average: number; minimum: number; lowCount: number; totalLines: number };
+        frameCount: number;
+        duration: number;
+        strategy?: 'scene' | 'uniform' | 'mixed';
+      };
+      if (!data.ocrText && !data.frameCount) return;
+      setMessages(prev => prev.map(m =>
+        m.isStreaming
+          ? {
+              ...m,
+              ocrText: data.ocrText,
+              ocrConfidence: data.ocrConfidence,
+              videoMeta: {
+                frameCount: data.frameCount,
+                duration: data.duration,
+                strategy: data.strategy,
+              },
+            }
+          : m
+      ));
+    });
+    return () => { cleanup?.(); };
+  }, []);
+
+  // v2.16: 监听屏幕监控状态事件
+  useEffect(() => {
+    const cleanup = window.nahidaAPI?.on('monitor:frame', (payload) => {
+      const data = payload as {
+        type: 'started' | 'stopped';
+        state?: { isActive: boolean; frameCount: number; changeCount: number };
+      };
+      if (data.type === 'started') {
+        console.log('[Monitor] started:', data.state);
+      } else if (data.type === 'stopped') {
+        console.log('[Monitor] stopped:', data.state);
+      }
+    });
+    return () => { cleanup?.(); };
+  }, []);
+
   // 发送消息
-  const handleSend = useCallback(async (content: string) => {
+  // v2.6: 支持 images 参数（多模态）
+  const handleSend = useCallback(async (content: string, images?: ImageAttachment[]) => {
     if (!window.nahidaAPI || isStreaming) return;
 
-    // 添加用户消息
+    // 添加用户消息（含图片缩略图）
     const userMsg: Message = {
       id: generateMessageId(),
       role: 'user',
       content,
       timestamp: Date.now(),
+      images: images && images.length > 0 ? images : undefined,
     };
     setMessages(prev => [...prev, userMsg]);
     setIsStreaming(true);
 
-    // 调用 IPC
     try {
-      await window.nahidaAPI.invoke('agent:chat', {
-        message: content,
-        mode: 'casual',
-      });
+      if (images && images.length > 0) {
+        // v2.6: 多模态路径 — 直接把 base64 列表传给 agent:chat
+        // 后端 agent:chat 在 payload.images 非空时走 vision 路径
+        await window.nahidaAPI.invoke(IpcChannel.AGENT_CHAT, {
+          message: content || '请描述这张图片的内容。',
+          mode: 'casual',
+          images: images.map(img => img.base64),
+        });
+      } else {
+        await window.nahidaAPI.invoke(IpcChannel.AGENT_CHAT, {
+          message: content,
+          mode: 'casual',
+        });
+      }
     } catch (err) {
       console.error('[ChatPanel] send failed:', err);
       setIsStreaming(false);
@@ -245,16 +363,7 @@ export const ChatPanel: React.FC = () => {
   }, []);
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'row',
-        background: 'linear-gradient(180deg, #f3f7f1 0%, #e8f1f4 100%)',
-        color: '#2e3a32',
-        fontFamily: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
-      }}
-    >
+    <div style={ROOT_STYLE}>
       {/* 左侧栏 */}
       <Sidebar
         currentPersonality={currentPersonality}
@@ -267,24 +376,13 @@ export const ChatPanel: React.FC = () => {
       />
 
       {/* 右侧主区 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={MAIN_CONTENT_STYLE}>
         {/* 顶部标题栏 */}
-        <div
-          style={{
-            padding: '10px 18px',
-            borderBottom: '1px solid #d9e4d4',
-            background: 'rgba(255, 255, 255, 0.7)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            boxShadow: '0 1px 3px rgba(46, 125, 50, 0.04)',
-          }}
-        >
-          <span style={{ fontSize: 14, color: '#2e7d32', fontWeight: 600 }}>
+        <div style={HEADER_STYLE}>
+          <span style={HEADER_TITLE_STYLE}>
             {currentPersonality?.displayName ?? '纳西妲'}
           </span>
-          <span style={{ fontSize: 11, color: '#7a8d72' }}>
+          <span style={HEADER_SUBTITLE_STYLE}>
             · {isStreaming ? '正在思考...' : '愿世界树的枝叶为你指路'}
           </span>
         </div>

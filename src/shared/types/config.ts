@@ -142,14 +142,37 @@ export interface VideoConfig {
 export interface VisionConfig {
   /** Vision 模型名（如 qwen2-vl / llava / minicpm-v） */
   model?: string;
-  /** 是否启用 OCR（本地 PaddleOCR / Tesseract，预留口） */
+  /** 是否启用 OCR（v2.7 实装 Tesseract.js） */
   ocrEnabled?: boolean;
-  /** OCR 引擎路径（预留） */
+  /** OCR 引擎路径（v2.7 起弃用，保留字段向后兼容） */
   ocrEnginePath?: string;
+  /** OCR 识别语言（v2.7，Tesseract 语言代码，如 chi_sim+eng） */
+  ocrLanguage?: string;
   /** 单次最大图片数 */
   maxImages?: number;
   /** 图片最大边长（超过则等比缩放，省显存） */
   maxImageSize?: number;
+  /** v2.19：屏幕监控持久化配置（规则跨重启保留） */
+  monitor?: MonitorPersistConfig;
+}
+
+/** v2.19：屏幕监控持久化配置（保存到 config.json） */
+export interface MonitorPersistConfig {
+  /** 默认截图间隔（ms） */
+  intervalMs?: number;
+  /** 默认帧差阈值（%） */
+  threshold?: number;
+  /** 默认分析冷却（ms） */
+  cooldownMs?: number;
+  /** 窗口过滤规则（持久化的白名单/黑名单） */
+  windowFilter?: {
+    /** 模式：whitelist（只监控匹配的窗口）或 blacklist（不监控匹配的窗口） */
+    mode: 'whitelist' | 'blacklist';
+    /** 匹配规则列表（字符串数组，持久化时不支持 RegExp） */
+    rules: string[];
+  };
+  /** 是否在应用启动时自动开始监控 */
+  autoStart?: boolean;
 }
 
 /** 应用配置 */

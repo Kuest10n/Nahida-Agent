@@ -20,7 +20,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { decryptString, encryptString, isEncryptionEnabled } from './crypto';
+import { decryptString, isEncryptionEnabled } from './crypto';
 
 // ── 类型定义 ──────────────────────────────────────────────────
 
@@ -133,16 +133,6 @@ export function getResidentShards(): LoadedShard[] {
 }
 
 /**
- * 按名获取单个分片（按需注入用）
- *
- * @returns 分片内容，不存在返回 undefined
- */
-export function getShard(name: ShardName): LoadedShard | undefined {
-  if (!initialized) loadShards();
-  return loadedShards.get(name);
-}
-
-/**
  * 按需分片召回规则：分片名 → 关键词正则
  *
  * 命中关键词的分片会被注入 system prompt。
@@ -184,18 +174,6 @@ export function recallShards(userMessage: string): LoadedShard[] {
   return hits;
 }
 
-/** 获取已加载的全部分片（调试用） */
-export function listLoadedShards(): LoadedShard[] {
-  if (!initialized) loadShards();
-  return Array.from(loadedShards.values());
-}
-
-/** 重置模块状态（测试用） */
-export function resetShards(): void {
-  loadedShards.clear();
-  initialized = false;
-}
-
 // ── 隐私沙箱：加密写回 ────────────────────────────────────────
 //
 // 默认不开启（兼容性优先）。调用 initEncryptionWithKeytar() 或
@@ -223,52 +201,4 @@ function safeDecrypt(content: string, filename: string): string {
 
   // 明文 → 直接返回
   return content;
-}
-
-/**
- * 写回分片到磁盘（支持加密）
- *
- * 如果启用了加密，会自动加密后写入。
- * 原子写：先写 .tmp 再 rename。
- */
-export function writeShard(name: ShardName, content: string): void {
-  const filePath = path.join(MEMORY_DIR, `${name}.md`);
-
-  try {
-    if (!fs.existsSync(MEMORY_DIR)) {
-      fs.mkdirSync(MEMORY_DIR, { recursive: true });
-    }
-
-    const toWrite = isEncryptionEnabled() ? encryptString(content) : content;
-    const tmpPath = `${filePath}.tmp`;
-    fs.writeFileSync(tmpPath, toWrite, 'utf-8');
-    fs.renameSync(tmpPath, filePath);
-
-    // 更新内存缓存
-    loadedShards.set(name, {
-      name,
-      content: content.trim(),
-      length: content.trim().length,
-    });
-  } catch (err) {
-    console.error(`[Shards] write ${name}.md failed:`, err);
-  }
-}
-
-/**
- * 把所有已加载的分片加密写回（启用加密时调用一次）
- *
- * 把明文的旧文件全部转成加密格式。
- * 只处理已加载的分片（没加载的说明不常用，留给用户手动处理）。
- */
-export function encryptAllShards(): number {
-  if (!isEncryptionEnabled()) return 0;
-
-  let count = 0;
-  for (const [name, shard] of loadedShards) {
-    writeShard(name, shard.content);
-    count++;
-  }
-  console.log(`[Shards] encrypted ${count} shards`);
-  return count;
 }

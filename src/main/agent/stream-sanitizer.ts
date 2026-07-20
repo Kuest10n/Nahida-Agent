@@ -17,6 +17,18 @@ const TOOL_OPEN = '<' + 'tool_call>';
 const TOOL_CLOSE = '<' + '/tool_call>';
 
 /**
+ * 转义正则特殊字符
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// 预编译常用正则（sanitizeOutput 是流式热路径，避免每次 new RegExp）
+const THINK_BLOCK_RE = new RegExp(escapeRegex(THINK_OPEN) + '[\\s\\S]*?' + escapeRegex(THINK_CLOSE) + '\\s*', 'g');
+const EMOTION_TAG_RE = /\[emotion:[^\]]*\]/g;
+const TOOL_BLOCK_RE = new RegExp(escapeRegex(TOOL_OPEN) + '[\\s\\S]*?' + escapeRegex(TOOL_CLOSE), 'g');
+
+/**
  * 输出清洗：剥离 LLM 输出中的内部标签
  *
  * 解决的泄漏问题：
@@ -28,13 +40,14 @@ const TOOL_CLOSE = '<' + '/tool_call>';
  * 且 Live2D 需要从中抽取动作 tag。
  */
 export function sanitizeOutput(text: string): string {
+  // 带 g flag 的正则在 .replace() 中会自动重置 lastIndex，无需手动处理
   return text
     // 1. 剥离思考标签及其内容（Qwen3 /think 模式）
-    .replace(new RegExp(escapeRegex(THINK_OPEN) + '[\\s\\S]*?' + escapeRegex(THINK_CLOSE) + '\\s*', 'g'), '')
+    .replace(THINK_BLOCK_RE, '')
     // 2. 剥离 [emotion:xxx] 情绪标签
-    .replace(/\[emotion:[^\]]*\]/g, '')
+    .replace(EMOTION_TAG_RE, '')
     // 3. 剥离残留的工具调用标签
-    .replace(new RegExp(escapeRegex(TOOL_OPEN) + '[\\s\\S]*?' + escapeRegex(TOOL_CLOSE), 'g'), '')
+    .replace(TOOL_BLOCK_RE, '')
     .trim();
 }
 
@@ -139,11 +152,4 @@ export class StreamSanitizer {
 
     return result;
   }
-}
-
-/**
- * 转义正则特殊字符
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

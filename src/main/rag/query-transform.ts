@@ -116,27 +116,35 @@ export function transformQuery(query: string): TransformedQuery {
 
 // ── 内部函数 ──────────────────────────────────────────────────
 
+// 预编译正则：查询清洗
+const CLEAN_QUERY_RE = /[^\u4e00-\u9fa5a-zA-Z0-9\s]/g;
+const CLEAN_WHITESPACE_RE = /\s+/g;
+
 /**
  * 清洗查询文本
  */
 function cleanQuery(query: string): string {
   return query
-    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ' ') // 保留中文、英文、数字
-    .replace(/\s+/g, ' ')
+    .replace(CLEAN_QUERY_RE, ' ') // 保留中文、英文、数字
+    .replace(CLEAN_WHITESPACE_RE, ' ')
     .trim();
 }
+
+// 预编译正则：分词 + 纯数字过滤
+const TOKENIZE_RE = /\s+|(?<=[\u4e00-\u9fa5])(?=[a-zA-Z])|(?<=[a-zA-Z])(?=[\u4e00-\u9fa5])/;
+const PURE_DIGITS_RE = /^\d+$/;
 
 /**
  * 提取关键词（去除停用词）
  */
 function extractKeywords(text: string): string[] {
   // 简单分词：按空格 + 字符边界
-  const words = text.split(/\s+|(?<=[\u4e00-\u9fa5])(?=[a-zA-Z])|(?<=[a-zA-Z])(?=[\u4e00-\u9fa5])/);
+  const words = text.split(TOKENIZE_RE);
 
   return words
     .filter(w => w.length >= 2) // 至少 2 字
     .filter(w => !STOP_WORDS.has(w))
-    .filter(w => !/^\d+$/.test(w)); // 排除纯数字
+    .filter(w => !PURE_DIGITS_RE.test(w)); // 排除纯数字
 }
 
 /**
@@ -206,27 +214,33 @@ function generateVariations(
   return [...new Set(variations)];
 }
 
+// 预编译正则：意图分类
+const INTENT_CONVERSATIONAL_RE = /^(你好|嗨|哈喽|早上好|晚上好|晚安)/;
+const INTENT_PROCEDURAL_RE = /怎么|如何|怎样|步骤|流程|方法/;
+const INTENT_AMBIGUOUS_RE = /是什么意思|指的是|有几种/;
+const INTENT_FACTUAL_RE = /是谁|是什么|哪里|什么时候|为什么/;
+
 /**
  * 意图分类（规则匹配）
  */
 function classifyIntent(text: string): QueryIntent {
   // 对话型（问候/闲聊）
-  if (/^(你好|嗨|哈喽|早上好|晚上好|晚安)/.test(text)) {
+  if (INTENT_CONVERSATIONAL_RE.test(text)) {
     return 'conversational';
   }
 
   // 过程查询（怎么做）
-  if (/怎么|如何|怎样|步骤|流程|方法/.test(text)) {
+  if (INTENT_PROCEDURAL_RE.test(text)) {
     return 'procedural';
   }
 
   // 歧义查询（多义词）
-  if (/是什么意思|指的是|有几种/.test(text)) {
+  if (INTENT_AMBIGUOUS_RE.test(text)) {
     return 'ambiguous';
   }
 
   // 事实查询（默认）
-  if (/是谁|是什么|哪里|什么时候|为什么/.test(text)) {
+  if (INTENT_FACTUAL_RE.test(text)) {
     return 'factual';
   }
 

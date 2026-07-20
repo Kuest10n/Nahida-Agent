@@ -192,6 +192,9 @@ export class InstructionGuard {
     };
   }
 
+  // 预编译正则：markdown 代码块匹配
+  private static readonly RE_CODE_BLOCK = /```[\s\S]*?```/g;
+
   /**
    * 提取非代码块内容
    *
@@ -203,7 +206,7 @@ export class InstructionGuard {
    */
   private static extractNonCodeContent(message: string): string {
     // 移除 markdown 代码块（包括 ```json ... ``` 和 ``` ... ```）
-    return message.replace(/```[\s\S]*?```/g, '[CODE_BLOCK]');
+    return message.replace(this.RE_CODE_BLOCK, '[CODE_BLOCK]');
   }
 
   /**

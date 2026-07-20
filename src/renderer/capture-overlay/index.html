@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>区域截图</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      cursor: crosshair;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    #selection {
+      position: absolute;
+      border: 2px solid #66bb6a;
+      background: rgba(102, 187, 106, 0.1);
+      pointer-events: none;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+    }
+    #size-label {
+      position: absolute;
+      background: #66bb6a;
+      color: #fff;
+      padding: 2px 8px;
+      font-size: 12px;
+      border-radius: 3px;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #hint {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-size: 18px;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+      animation: pulse 2s infinite;
+    }
+    #hint .esc {
+      display: block;
+      margin-top: 8px;
+      font-size: 13px;
+      opacity: 0.7;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.5; }
+    }
+    #toolbar {
+      position: absolute;
+      display: none;
+      gap: 6px;
+      background: #fff;
+      padding: 6px;
+      border-radius: 4px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    }
+    #toolbar button {
+      padding: 4px 12px;
+      border: none;
+      border-radius: 3px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #toolbar .btn-confirm {
+      background: #66bb6a;
+      color: #fff;
+    }
+    #toolbar .btn-cancel {
+      background: #ef5350;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay"></div>
+  <div id="selection" style="display:none;"></div>
+  <div id="size-label" style="display:none;"></div>
+  <div id="hint">
+    拖动鼠标框选区域
+    <span class="esc">按 ESC 取消</span>
+  </div>
+  <div id="toolbar">
+    <button class="btn-cancel" id="btn-cancel">取消</button>
+    <button class="btn-confirm" id="btn-confirm">确认截图</button>
+  </div>
+
+  <script>
+    // 选区状态
+    let isSelecting = false;
+    let startX = 0;
+    let startY = 0;
+    let endX = 0;
+    let endY = 0;
+    let dpr = 1;
+    let displayId = '';
+    let displayIndex = 0;
+    let totalDisplays = 0;
+
+    const overlay = document.getElementById('overlay');
+    const selection = document.getElementById('selection');
+    const sizeLabel = document.getElementById('size-label');
+    const hint = document.getElementById('hint');
+    const toolbar = document.getElementById('toolbar');
+    const btnConfirm = document.getElementById('btn-confirm');
+    const btnCancel = document.getElementById('btn-cancel');
+
+    // 监听主进程启动选区指令
+    window.nahidaAPI.on('screenshot:region-start', (payload) => {
+      dpr = (payload && payload.devicePixelRatio) || 1;
+      displayId = (payload && payload.displayId) || '';
+      displayIndex = (payload && payload.displayIndex) || 1;
+      totalDisplays = (payload && payload.totalDisplays) || 1;
+      // 显示 hint 等待用户拖拽
+      hint.style.display = 'block';
+      // 多屏时在 hint 中显示屏幕编号
+      if (totalDisplays > 1) {
+        hint.innerHTML = `屏幕 ${displayIndex} / ${totalDisplays}<br>拖动鼠标框选区域<span class="esc">按 ESC 取消</span>`;
+      }
+    });
+
+    // 鼠标按下：开始选区
+    overlay.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // 仅左键
+      isSelecting = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      endX = e.clientX;
+      endY = e.clientY;
+      hint.style.display = 'none';
+      selection.style.display = 'block';
+      sizeLabel.style.display = 'block';
+      toolbar.style.display = 'none';
+      updateSelection();
+    });
+
+    // 鼠标移动：更新选区
+    overlay.addEventListener('mousemove', (e) => {
+      if (!isSelecting) return;
+      endX = e.clientX;
+      endY = e.clientY;
+      updateSelection();
+    });
+
+    // 鼠标松开：结束选区
+    overlay.addEventListener('mouseup', (e) => {
+      if (e.button !== 0) return;
+      if (!isSelecting) return;
+      isSelecting = false;
+      endX = e.clientX;
+      endY = e.clientY;
+      updateSelection();
+      // 显示工具栏
+      showToolbar();
+    });
+
+    // ESC 取消
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        cancelScreenshot();
+      }
+    });
+
+    // 工具栏按钮
+    btnConfirm.addEventListener('click', confirmScreenshot);
+    btnCancel.addEventListener('click', cancelScreenshot);
+
+    // 更新选区显示
+    function updateSelection() {
+      const left = Math.min(startX, endX);
+      const top = Math.min(startY, endY);
+      const width = Math.abs(endX - startX);
+      const height = Math.abs(endY - startY);
+
+      selection.style.left = left + 'px';
+      selection.style.top = top + 'px';
+      selection.style.width = width + 'px';
+      selection.style.height = height + 'px';
+
+      // 尺寸标签（转换为物理像素）
+      const physW = Math.round(width * dpr);
+      const physH = Math.round(height * dpr);
+      sizeLabel.textContent = `${physW} × ${physH}`;
+      sizeLabel.style.left = (left + width + 8) + 'px';
+      sizeLabel.style.top = (top + height + 8) + 'px';
+      // 防止标签超出屏幕
+      const labelRight = left + width + 8 + 80;
+      if (labelRight > window.innerWidth) {
+        sizeLabel.style.left = (left - 80) + 'px';
+      }
+    }
+
+    // 显示工具栏
+    function showToolbar() {
+      const left = Math.min(startX, endX);
+      const top = Math.min(startY, endY);
+      const width = Math.abs(endX - startX);
+      const height = Math.abs(endY - startY);
+
+      // 工具栏放在选区右下角下方
+      let tbLeft = left + width - 140;
+      let tbTop = top + height + 8;
+      if (tbTop + 40 > window.innerHeight) {
+        tbTop = top - 40;
+      }
+      if (tbLeft < 0) tbLeft = 0;
+      if (tbLeft + 140 > window.innerWidth) {
+        tbLeft = window.innerWidth - 140;
+      }
+      toolbar.style.left = tbLeft + 'px';
+      toolbar.style.top = tbTop + 'px';
+      toolbar.style.display = 'flex';
+    }
+
+    // 确认截图：回传坐标
+    function confirmScreenshot() {
+      const left = Math.min(startX, endX);
+      const top = Math.min(startY, endY);
+      const width = Math.abs(endX - startX);
+      const height = Math.abs(endY - startY);
+
+      if (width < 5 || height < 5) {
+        // 选区太小，视为取消
+        cancelScreenshot();
+        return;
+      }
+
+      // 转换为物理像素坐标
+      const region = {
+        displayId: displayId,
+        x: Math.round(left * dpr),
+        y: Math.round(top * dpr),
+        width: Math.round(width * dpr),
+        height: Math.round(height * dpr),
+      };
+
+      window.nahidaAPI.invoke('screenshot:region-result', region).then(() => {
+        // 主进程会关闭窗口
+      });
+    }
+
+    // 取消截图
+    function cancelScreenshot() {
+      window.nahidaAPI.invoke('screenshot:region-cancel', {});
+    }
+  </script>
+</body>
+</html>
