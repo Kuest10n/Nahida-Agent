@@ -26,6 +26,63 @@
  */
 
 /**
+ * 将 IPv6 十六进制后缀转换为 IPv4 地址
+ *
+ * Node.js 的 URL 解析器会将 IPv4-mapped IPv6 地址规范化为十六进制格式：
+ *   ::ffff:127.0.0.1 → ::ffff:7f00:1
+ *   ::ffff:10.0.0.1 → ::ffff:a00:1
+ *
+ * 此函数将后缀部分（如 '7f00:1'）转换回点分十进制 IPv4 地址。
+ *
+ * @returns 转换后的 IPv4 地址，失败返回 null
+ */
+function ipv6SuffixToIPv4(suffix: string): string | null {
+  const parts = suffix.split(':').filter(p => p !== '' && p !== '0');
+
+  if (parts.length === 1) {
+    const part = parts[0];
+    if (!part) return null;
+    const full = part.padStart(8, '0');
+    if (!/^[0-9a-f]{8}$/i.test(full)) return null;
+    const octets = [
+      parseInt(full.slice(0, 2), 16),
+      parseInt(full.slice(2, 4), 16),
+      parseInt(full.slice(4, 6), 16),
+      parseInt(full.slice(6, 8), 16),
+    ];
+    if (octets.some(o => isNaN(o) || o < 0 || o > 255)) return null;
+    return octets.join('.');
+  }
+
+  if (parts.length === 2) {
+    const [high, low] = parts;
+    if (!high || !low) return null;
+    const highPadded = high.padStart(4, '0');
+    const lowPadded = low.padStart(4, '0');
+    if (!/^[0-9a-f]{4}$/i.test(highPadded) || !/^[0-9a-f]{4}$/i.test(lowPadded)) return null;
+    const octets = [
+      parseInt(highPadded.slice(0, 2), 16),
+      parseInt(highPadded.slice(2, 4), 16),
+      parseInt(lowPadded.slice(0, 2), 16),
+      parseInt(lowPadded.slice(2, 4), 16),
+    ];
+    if (octets.some(o => isNaN(o) || o < 0 || o > 255)) return null;
+    return octets.join('.');
+  }
+
+  if (parts.length === 4) {
+    const octets = parts.map(p => {
+      const padded = p.padStart(2, '0');
+      return parseInt(padded, 16);
+    });
+    if (octets.some(o => isNaN(o) || o < 0 || o > 255)) return null;
+    return octets.join('.');
+  }
+
+  return null;
+}
+
+/**
  * 判断 URL 是否安全可访问（拦截 SSRF）
  *
  * @returns true 表示可访问，false 表示被拦截
@@ -40,6 +97,25 @@ export function isSafeUrl(url: string): boolean {
     const cleanHost = hostname.startsWith('[') && hostname.endsWith(']')
       ? hostname.slice(1, -1)
       : hostname;
+
+    // IPv4-mapped IPv6 (::ffff:0:0/96) — Node.js 会将其规范化为十六进制
+    // 如 ::ffff:127.0.0.1 → ::ffff:7f00:1，需要提取并转换回 IPv4
+    if (cleanHost.startsWith('::ffff:')) {
+      const v4Part = cleanHost.slice(7);
+      const v4Address = ipv6SuffixToIPv4(v4Part);
+      if (v4Address) {
+        return isSafeUrl(`https://${v4Address}/`);
+      }
+    }
+
+    // IPv4-compatible IPv6 (deprecated, 但仍需处理)
+    if (cleanHost.startsWith('::')) {
+      const v4Part = cleanHost.slice(2);
+      const v4Address = ipv6SuffixToIPv4(v4Part);
+      if (v4Address) {
+        return isSafeUrl(`https://${v4Address}/`);
+      }
+    }
 
     // IPv6 回环 [::1]
     if (cleanHost === '::1' || cleanHost === '0:0:0:0:0:0:0:1') return false;

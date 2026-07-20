@@ -493,8 +493,8 @@ export const ipcSchemas = {
   [IpcChannel.VIDEO_RESULT]: videoResultSchema,
   // v2.16: 屏幕实时监控
   [IpcChannel.MONITOR_START]: z.object({
-    intervalMs: z.number().optional(),
-    threshold: z.number().optional(),
+    intervalMs: z.number().int().min(500).max(60000).optional(),
+    threshold: z.number().min(1).max(100).optional(),
     autoAnalyze: z.boolean().optional(),
   }),
   [IpcChannel.MONITOR_STOP]: z.object({}),

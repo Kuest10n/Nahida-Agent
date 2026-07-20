@@ -72,7 +72,7 @@ const ALLOWED_EXPORT_DIRS: readonly string[] = [
  *
  * @returns 校验通过返回真实绝对路径，否则返回 null
  */
-function safeResolveExportPath(filePath: string): string | null {
+export function safeResolveExportPath(filePath: string): string | null {
   if (!filePath || typeof filePath !== 'string') return null;
   if (!path.isAbsolute(filePath)) return null;
 

@@ -514,13 +514,22 @@ const videoGenerateTool: ToolDefinition = {
     const config = readVideoConfig();
     const backend = (params.backend as BackendName | undefined) ?? config.backend ?? 'volcano';
 
+    const imageUrl = params.image_url as string | undefined;
+    if (imageUrl && !isSafeUrl(imageUrl)) {
+      return {
+        ok: false,
+        data: `URL 安全校验失败：image_url 不允许访问内网或不安全地址`,
+        latencyMs: Date.now() - startTime,
+      };
+    }
+
     const options: VideoGenerateOptions = {
       prompt: params.prompt as string,
       model: params.model as string | undefined,
       resolution: params.resolution as string | undefined,
       durationSeconds: params.duration_seconds as number | undefined,
       aspectRatio: params.aspect_ratio as string | undefined,
-      imageUrl: params.image_url as string | undefined,
+      imageUrl,
     };
 
     let result: AdapterResult;

@@ -36,14 +36,61 @@ import type {
 /** 插件目录 */
 const PLUGINS_DIR = path.resolve(process.cwd(), 'plugins');
 
-/** 被 security 策略阻止的模块（VULN-002 修复） */
+/** 被 security 策略阻止的模块（VULN-002 / VULN-006 修复） */
 const BLOCKED_MODULES = new Set([
   'child_process',
   'cluster',
   'worker_threads',
+  'fs',
+  'path',
+  'net',
+  'http',
+  'https',
+  'dgram',
+  'dns',
+  'tls',
+  'crypto',
+  'os',
+  'process',
+  'module',
+  'vm',
+  'repl',
+  'readline',
+  'tty',
+  'zlib',
+  'stream',
+  'events',
+  'util',
+  'assert',
+  'buffer',
+  'url',
+  'querystring',
+  'string_decoder',
+  'punycode',
+  'http2',
+  'perf_hooks',
+  'v8',
+  'inspector',
+  'diagnostics_channel',
+  'async_hooks',
+  'trace_events',
+  'worker_threads',
   'node:child_process',
   'node:cluster',
   'node:worker_threads',
+  'node:fs',
+  'node:path',
+  'node:net',
+  'node:http',
+  'node:https',
+  'node:dgram',
+  'node:dns',
+  'node:tls',
+  'node:crypto',
+  'node:os',
+  'node:process',
+  'node:module',
+  'node:vm',
 ]);
 
 /**
@@ -53,12 +100,44 @@ const BLOCKED_MODULES = new Set([
  * 阻止 child_process / cluster / worker_threads 等危险模块。
  * 注意：vm.runInThisContext 不是完美沙箱，但能阻止直接 require 危险模块。
  */
+function validateCommandArgs(args: string[]): boolean {
+  if (!Array.isArray(args)) return false;
+  for (const arg of args) {
+    if (typeof arg !== 'string') return false;
+    if (arg.includes('..')) return false;
+    if (arg.includes('/') || arg.includes('\\')) return false;
+    if (arg.length > 1024) return false;
+  }
+  return true;
+}
+
+function validateToolParams(params: Record<string, unknown>): boolean {
+  if (typeof params !== 'object' || params === null) return false;
+  const validateValue = (value: unknown): boolean => {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') {
+      if (value.includes('..')) return false;
+      if (value.length > 4096) return false;
+      return true;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') return true;
+    if (Array.isArray(value)) {
+      return value.every(validateValue);
+    }
+    if (typeof value === 'object') {
+      return validateToolParams(value as Record<string, unknown>);
+    }
+    return false;
+  };
+  for (const key of Object.keys(params)) {
+    if (!validateValue(params[key])) return false;
+  }
+  return true;
+}
+
 function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
   const code = fs.readFileSync(indexPath, 'utf-8');
   const dir = path.dirname(indexPath);
-
-  // CommonJS 包装：(function(exports, require, module, __filename, __dirname) { ... })
-  const wrapper = `(function(exports, require, module, __filename, __dirname) { ${code} })`;
 
   const sandboxedRequire = (id: string): unknown => {
     if (BLOCKED_MODULES.has(id)) {
@@ -68,15 +147,31 @@ function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
   };
 
   const moduleObj: { exports: Partial<NahidaPlugin> } = { exports: {} };
-  const compiledFn = vm.runInThisContext(wrapper, { filename: indexPath }) as (
-    exports: Record<string, unknown>,
-    require: (id: string) => unknown,
-    module: { exports: Partial<NahidaPlugin> },
-    filename: string,
-    dirname: string,
-  ) => void;
 
-  compiledFn(moduleObj.exports, sandboxedRequire, moduleObj, indexPath, dir);
+  const context: Record<string, unknown> = {
+    require: sandboxedRequire,
+    module: moduleObj,
+    exports: moduleObj.exports,
+    __filename: indexPath,
+    __dirname: dir,
+    console: console,
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
+    Promise,
+    Array,
+    Object,
+    String,
+    Number,
+    Boolean,
+    Function,
+    Error,
+    JSON,
+  };
+
+  const compiledFn = vm.runInNewContext(code, context, { filename: indexPath });
+
   return moduleObj.exports;
 }
 
@@ -346,6 +441,11 @@ export function executePluginCommand(
   if (!loaded || loaded.status !== 'enabled') return null;
   if (!loaded.plugin.executeCommand) return null;
 
+  if (!validateCommandArgs(args)) {
+    console.error(`[Plugins] ${pluginId}.executeCommand() invalid args:`, args);
+    return '参数校验失败：不允许包含路径遍历或超长参数';
+  }
+
   try {
     return loaded.plugin.executeCommand(commandName, args);
   } catch (err) {
@@ -370,6 +470,11 @@ export async function executePluginTool(
   const loaded = loadedPlugins.get(pluginId);
   if (!loaded || loaded.status !== 'enabled') return null;
   if (!loaded.plugin.executeTool) return null;
+
+  if (!validateToolParams(params)) {
+    console.error(`[Plugins] ${pluginId}.executeTool() invalid params:`, params);
+    return '参数校验失败：不允许包含路径遍历或超长值';
+  }
 
   try {
     return await loaded.plugin.executeTool(toolName, params);

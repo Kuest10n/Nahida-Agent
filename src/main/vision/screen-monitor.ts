@@ -91,6 +91,10 @@ export interface FrameDiffResult {
 const DEFAULT_INTERVAL_MS = 2000;
 /** 默认帧差阈值（5%） */
 const DEFAULT_THRESHOLD = 5;
+/** 自动清理周期（每多少帧清理一次） */
+const AUTO_CLEANUP_INTERVAL_FRAMES = 100;
+/** 默认保留截图数 */
+const DEFAULT_KEEP_SCREENSHOTS = 200;
 /** 默认分析冷却（5秒） */
 const DEFAULT_COOLDOWN_MS = 5000;
 /** 帧差对比缩放尺寸（越小越快，64x64 足够） */
@@ -346,6 +350,11 @@ async function monitorTick(): Promise<void> {
   } catch (err) {
     console.error('[Monitor] tick error:', err);
   } finally {
+    // 每 N 帧清理一次旧截图，防止磁盘泄漏
+    if (frameCount > 0 && frameCount % AUTO_CLEANUP_INTERVAL_FRAMES === 0) {
+      cleanupMonitorFiles(DEFAULT_KEEP_SCREENSHOTS);
+    }
+
     // 继续下一轮（只在活跃时）
     // 用 finally 保证：try 内任何 return / throw 都不会跳过 reschedule，避免监控永久停止
     if (isActive) {
@@ -376,6 +385,14 @@ export function startMonitor(config?: MonitorConfig, callback?: (result: FrameDi
   changeCount = 0;
   lastAnalyzeTime = 0;
   lastFrameGray = null;
+
+  // 防御性钳位：防止异常配置导致资源失控
+  if (currentConfig.intervalMs !== undefined) {
+    currentConfig.intervalMs = Math.max(500, Math.min(60000, currentConfig.intervalMs));
+  }
+  if (currentConfig.threshold !== undefined) {
+    currentConfig.threshold = Math.max(1, Math.min(100, currentConfig.threshold));
+  }
 
   console.log(`[Monitor] started with config: interval=${currentConfig.intervalMs ?? DEFAULT_INTERVAL_MS}ms, threshold=${currentConfig.threshold ?? DEFAULT_THRESHOLD}%, autoAnalyze=${currentConfig.autoAnalyze ?? true}`);
 

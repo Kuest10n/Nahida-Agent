@@ -171,7 +171,7 @@ export function installPackage(options: InstallOptions): InstallResult {
  * 修复：所有路径（无论绝对还是相对）最终都必须落在 packages/ 目录内，
  * 并用 realpathSync 解析符号链接防绕过。
  */
-function resolvePackageDir(input: string): string | null {
+export function resolvePackageDir(input: string): string | null {
   if (!input || typeof input !== 'string') return null;
 
   // 防路径遍历：显式拒绝 ..（虽然后面 realpath 会兜底，但早拦截更稳）

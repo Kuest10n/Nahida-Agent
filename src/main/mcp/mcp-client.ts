@@ -13,6 +13,8 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { z } from 'zod';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { registerTools, type ToolDefinition, type ToolResult } from '../tools/registry';
 import { getConfig } from '../config/config';
 
@@ -41,10 +43,78 @@ interface McpMessage {
 const runningServers = new Map<string, ChildProcess>();
 const registeredToolNames = new Set<string>();
 
+/**
+ * MCP Server 允许执行的目录白名单
+ * 防止用户配置恶意路径执行任意系统命令
+ */
+const ALLOWED_MCP_DIRS: readonly string[] = [
+  path.resolve(process.cwd(), 'mcp-servers'),
+  path.resolve(process.cwd(), 'tools', 'mcp'),
+  path.resolve(process.cwd(), 'bin'),
+];
+
+function isValidMcpPath(commandPath: string): boolean {
+  if (!commandPath || typeof commandPath !== 'string') return false;
+
+  let realPath: string;
+  try {
+    realPath = fs.realpathSync(commandPath);
+  } catch {
+    return false;
+  }
+
+  return ALLOWED_MCP_DIRS.some(dir => {
+    return realPath === dir || realPath.startsWith(dir + path.sep);
+  });
+}
+
+function mcpParamToZod(param: Record<string, unknown>): z.ZodTypeAny {
+  const type = param.type as string;
+  const enumValues = (param.enum as unknown[]) ?? [];
+
+  switch (type) {
+    case 'string':
+      if (enumValues.length > 0) {
+        return z.enum(enumValues as [string, ...string[]]);
+      }
+      return z.string();
+    case 'number':
+      return z.number();
+    case 'boolean':
+      return z.boolean();
+    case 'array':
+      return z.array(z.any());
+    case 'object':
+      const properties = param.properties as Record<string, Record<string, unknown>> ?? {};
+      const shape: Record<string, z.ZodTypeAny> = {};
+      for (const [key, prop] of Object.entries(properties)) {
+        shape[key] = mcpParamToZod(prop);
+      }
+      return z.object(shape);
+    default:
+      return z.any();
+  }
+}
+
+function mcpToolToSchema(parameters: Record<string, unknown>): z.ZodObject<any> {
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const [name, param] of Object.entries(parameters)) {
+    const zodType = mcpParamToZod(param as Record<string, unknown>);
+    const isRequired = !(param as Record<string, unknown>).optional;
+    shape[name] = isRequired ? zodType : zodType.optional();
+  }
+  return z.object(shape);
+}
+
 export async function connectMcpServer(config: McpServerConfig): Promise<void> {
   if (runningServers.has(config.name)) {
     console.warn(`[MCP Client] Server "${config.name}" already running`);
     return;
+  }
+
+  if (!isValidMcpPath(config.command)) {
+    console.error(`[MCP Client] Command path not allowed: ${config.command}`);
+    throw new Error(`MCP Server 命令路径不在白名单目录内: ${config.command}`);
   }
 
   try {
@@ -121,12 +191,18 @@ function handleMcpMessage(
             continue;
           }
 
+          const paramSchema = mcpToolToSchema(mcpTool.parameters);
           const toolDef: ToolDefinition = {
             name: mcpTool.name,
             description: mcpTool.description,
-            parameters: z.object({}),
+            parameters: paramSchema,
             execute: async (params: Record<string, unknown>): Promise<ToolResult> => {
-              return await executeMcpTool(serverName, mcpTool.name, params);
+              const start = Date.now();
+              const validation = paramSchema.safeParse(params);
+              if (!validation.success) {
+                return { ok: false, data: `参数校验失败: ${validation.error.message}`, latencyMs: Date.now() - start };
+              }
+              return await executeMcpTool(serverName, mcpTool.name, validation.data);
             },
           };
 
