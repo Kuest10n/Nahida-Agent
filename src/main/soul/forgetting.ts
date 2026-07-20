@@ -74,13 +74,17 @@ function init(): void {
   initialized = true;
 }
 
-/** 保存到磁盘 */
+/** 保存到磁盘（原子写：.tmp → rename，避免崩溃时文件截断损坏） */
 function save(): void {
   try {
     const dir = path.dirname(STRENGTH_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const data = Array.from(strengthMap.values());
-    fs.writeFileSync(STRENGTH_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    const json = JSON.stringify(data, null, 2);
+    // 先写 .tmp 再 rename，保证文件要么是旧内容要么是新内容，不会半截
+    const tmpPath = `${STRENGTH_FILE}.tmp`;
+    fs.writeFileSync(tmpPath, json, 'utf-8');
+    fs.renameSync(tmpPath, STRENGTH_FILE);
   } catch (err) {
     console.error('[Forgetting] save failed:', err);
   }

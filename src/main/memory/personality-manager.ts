@@ -55,7 +55,11 @@ function writeIndex(): void {
     current: currentPersonalityId,
     personalities: Array.from(personalities.values()),
   };
-  fs.writeFileSync(PERSONALITY_INDEX_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  const json = JSON.stringify(data, null, 2);
+  // 原子写：.tmp → rename，避免崩溃时 .index.json 截断为半截 JSON
+  const tmpPath = `${PERSONALITY_INDEX_FILE}.tmp`;
+  fs.writeFileSync(tmpPath, json, 'utf-8');
+  fs.renameSync(tmpPath, PERSONALITY_INDEX_FILE);
 }
 
 function loadIndex(): void {
@@ -125,6 +129,12 @@ function ensurePersonalityDirectory(personalityId: string): void {
 }
 
 export function getPersonalityDirectory(personalityId: string): string {
+  // 安全：personalityId 来自用户 IPC（personality:create / personality:switch），
+  // 必须严格校验，防止路径遍历（../、绝对路径、特殊字符）导致任意目录创建/删除
+  // 仅允许字母、数字、下划线、短横线
+  if (!/^[a-zA-Z0-9_-]+$/.test(personalityId)) {
+    throw new Error(`[PersonalityManager] invalid personalityId: ${personalityId}`);
+  }
   return path.join(PERSONALITIES_DIR, personalityId);
 }
 
@@ -170,6 +180,15 @@ export function createPersonality(options: CreatePersonalityOptions): Personalit
   if (!initialized) initPersonalityManager();
   if (personalities.has(options.id)) return null;
 
+  // 安全：在写盘前先校验 id（getPersonalityDirectory 会 throw）
+  // 这里 catch 让 IPC 返回 null 而不是 reject
+  try {
+    ensurePersonalityDirectory(options.id);
+  } catch (err) {
+    console.error('[PersonalityManager] createPersonality rejected (invalid id):', err);
+    return null;
+  }
+
   const personality: Personality = {
     ...options,
     default: false,
@@ -177,7 +196,6 @@ export function createPersonality(options: CreatePersonalityOptions): Personalit
   };
 
   personalities.set(options.id, personality);
-  ensurePersonalityDirectory(options.id);
   writeIndex();
   console.log(`[PersonalityManager] created: ${options.id}`);
   return personality;
@@ -189,9 +207,17 @@ export function deletePersonality(personalityId: string): boolean {
   if (personalityId === currentPersonalityId) return false;
   if (personalities.get(personalityId)?.default) return false;
 
+  // 安全：删盘前先校验 id（getPersonalityDirectory 会 throw）
+  let dir: string;
+  try {
+    dir = getPersonalityDirectory(personalityId);
+  } catch (err) {
+    console.error('[PersonalityManager] deletePersonality rejected (invalid id):', err);
+    return false;
+  }
+
   personalities.delete(personalityId);
 
-  const dir = getPersonalityDirectory(personalityId);
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

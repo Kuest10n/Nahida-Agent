@@ -270,11 +270,19 @@ export async function broadcastMessage(
 ): Promise<GroupReply[]> {
   if (!initialized) initGroupChat();
 
+  // 入口判空：content 为空字符串/纯空格时直接返回，避免触发 N 次无意义的模型调用
+  if (!content.trim()) {
+    console.warn('[GroupChat] broadcastMessage rejected: empty content');
+    return [];
+  }
+
   // 获取群 ID 级互斥锁，串行化广播以防止并发写入竞态
+  // 注意：必须存 lock 本身（不是 prev.finally 派生的新 Promise），
+  // 否则 finally 中的 `groupMutex.get(groupId) === lock` 永远 false，cleanup 失效
   const prev = groupMutex.get(groupId) ?? Promise.resolve();
   let release!: () => void;
   const lock = new Promise<void>(resolve => { release = resolve; });
-  groupMutex.set(groupId, prev.finally(() => lock));
+  groupMutex.set(groupId, lock);
 
   try {
     await prev;
@@ -298,7 +306,11 @@ export async function broadcastMessage(
     group.lastActivity = Date.now();
     saveGroup(group);
 
-    const aiMembers = group.members.filter(m => m.type === 'ai');
+    // 对 aiMembers 做快照（浅拷贝每个 member），避免广播期间 setTokenLimit 改了 member.tokenLimit
+    // 导致同一轮广播内不同成员看到不同的 token 限制
+    const aiMembers = group.members
+      .filter(m => m.type === 'ai')
+      .map(m => ({ ...m }));
     const replies: GroupReply[] = [];
 
     for (const member of aiMembers) {

@@ -164,33 +164,40 @@ export async function recognizeLocal(audioPath: string): Promise<{ ok: boolean; 
   currentState = 'processing';
   pushStateChange('processing');
 
-  const result = await runWhisperInfer({
-    inputPath: audioPath,
-    lang: getEffectiveLang(),
-    modelPath: getWhisperModelPath(),
-    segments: true,
-  });
+  // try-finally 保证：whisper 进程崩溃/超时/抛错时状态必定恢复 idle，
+  // 否则状态机会卡死在 'processing'，后续 STT 命令全部被拒
+  try {
+    const result = await runWhisperInfer({
+      inputPath: audioPath,
+      lang: getEffectiveLang(),
+      modelPath: getWhisperModelPath(),
+      segments: true,
+    });
 
-  currentState = 'idle';
-  pushStateChange('idle');
+    if (!result.ok || !result.text) {
+      return { ok: false, error: result.error ?? '识别失败' };
+    }
 
-  if (!result.ok || !result.text) {
-    return { ok: false, error: result.error ?? '识别失败' };
+    const sttResult: STTResult = {
+      text: result.text.trim(),
+      isFinal: true,
+      confidence: result.segments?.[0]?.confidence ?? 0.5,
+      timestamp: Date.now(),
+      backend,
+    };
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IpcChannel.STT_RESULT, sttResult);
+    }
+
+    return { ok: true, result: sttResult };
+  } catch (err) {
+    console.error('[STT] recognizeLocal failed:', err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    currentState = 'idle';
+    pushStateChange('idle');
   }
-
-  const sttResult: STTResult = {
-    text: result.text.trim(),
-    isFinal: true,
-    confidence: result.segments?.[0]?.confidence ?? 0.5,
-    timestamp: Date.now(),
-    backend,
-  };
-
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(IpcChannel.STT_RESULT, sttResult);
-  }
-
-  return { ok: true, result: sttResult };
 }
 
 export function receiveResult(result: STTResult): void {

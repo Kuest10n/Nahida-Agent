@@ -70,7 +70,23 @@ export async function connectMcpServer(config: McpServerConfig): Promise<void> {
     });
 
     child.stderr.on('data', (data: Buffer) => {
-      console.error(`[MCP ${config.name}] stderr:`, data.toString().trim());
+      // 第五关 LOG-01：MCP server 是用户配置的第三方进程，stderr 可能含敏感信息
+      // （API key、token、本地路径、用户名等），直接 console.error 会污染主日志。
+      // 处理：
+      //   1. 截断超长行（防 stderr 爆破导致主日志膨胀）
+      //   2. 用正则脱敏常见敏感字段（key/token/secret/password/authorization）
+      //   3. 限制单次打印行数
+      const raw = data.toString();
+      const lines = raw.split('\n').slice(0, 20); // 最多 20 行
+      const SENSITIVE_RE = /(\b(?:api[_-]?key|token|secret|password|authorization|bearer|cookie|session[_-]?id)\b\s*[:=]\s*)([^\s,;"']+)/gi;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const safe = trimmed
+          .replace(SENSITIVE_RE, '$1***')
+          .slice(0, 500); // 单行最长 500 字符
+        console.error(`[MCP ${config.name}] stderr:`, safe);
+      }
     });
 
     child.on('close', (code: number) => {

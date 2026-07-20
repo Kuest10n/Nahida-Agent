@@ -20,6 +20,7 @@
 import { z } from 'zod';
 import { registerTools, type ToolDefinition, type ToolResult } from './registry';
 import { emailSendSchema, emailReceiveSchema, emailSend, emailReceive } from '../mcp/servers/email-mcp-server';
+import { isSafeUrl } from '../safety/url-guard';
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -43,6 +44,11 @@ function getAllowedDirs(): string[] {
 /**
  * 安全解析文件路径，检查是否在白名单内
  *
+ * 防御两类攻击：
+ *   1. 路径遍历：path.resolve 已规范化 ../，白名单前缀检查可拦截
+ *   2. 符号链接绕过：用户在白名单目录内创建符号链接指向敏感文件（如 /etc/passwd），
+ *      path.resolve 不解析符号链接，必须用 fs.realpathSync 解析真实路径再校验
+ *
  * @returns 解析后的绝对路径，或 null（表示不在白名单内）
  */
 function safeResolvePath(filePath: string): string | null {
@@ -54,7 +60,20 @@ function safeResolvePath(filePath: string): string | null {
     return resolved === dir || resolved.startsWith(dir + path.sep);
   });
 
-  return isAllowed ? resolved : null;
+  if (!isAllowed) return null;
+
+  // 二次校验：解析符号链接后的真实路径也必须在白名单内
+  // 防止用户在 memory/ 下 ln -s /etc/passwd memory/passwd_link 绕过
+  try {
+    const realPath = fs.realpathSync(resolved);
+    const realAllowed = allowedDirs.some(dir => {
+      return realPath === dir || realPath.startsWith(dir + path.sep);
+    });
+    return realAllowed ? realPath : null;
+  } catch {
+    // 文件不存在时 realpathSync 抛错，返回 null（让上层报"文件不存在"）
+    return null;
+  }
 }
 
 // ── 工具 1：clock（获取当前时间） ─────────────────────────────
@@ -87,65 +106,9 @@ const clockTool: ToolDefinition = {
 };
 
 // ── 工具 2：web_fetch（抓取网页正文） ─────────────────────────
-
-function isSafeUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname.toLowerCase();
-
-    // 解 IPv6 方括号
-    const cleanHost = hostname.startsWith('[') && hostname.endsWith(']')
-      ? hostname.slice(1, -1)
-      : hostname;
-
-    // IPv6 回环 [::1]
-    if (cleanHost === '::1' || cleanHost === '0:0:0:0:0:0:0:1') return false;
-
-    // IPv6 ULA [fc00::]/7 (fc00:: - fdff::)
-    if (cleanHost.startsWith('fc') || cleanHost.startsWith('fd')) return false;
-
-    // IPv6 link-local [fe80::]/10
-    if (cleanHost.startsWith('fe8') || cleanHost.startsWith('fe9') ||
-        cleanHost.startsWith('fea') || cleanHost.startsWith('feb')) return false;
-
-    // IPv4 回环 127.0.0.0/8
-    if (cleanHost.startsWith('127.')) return false;
-
-    // IPv4 私网 10.0.0.0/8
-    if (cleanHost.startsWith('10.')) return false;
-
-    // IPv4 私网 172.16.0.0/12
-    if (cleanHost.startsWith('172.')) {
-      const parts = cleanHost.split('.');
-      const secondOctet = parseInt(parts[1] ?? '0', 10);
-      if (secondOctet >= 16 && secondOctet <= 31) return false;
-    }
-
-    // IPv4 私网 192.168.0.0/16
-    if (cleanHost.startsWith('192.168.')) return false;
-
-    // IPv4 链路本地 169.254.0.0/16 (含 AWS 元数据 169.254.169.254)
-    if (cleanHost.startsWith('169.254.')) return false;
-
-    // IPv4 CGNAT 100.64.0.0/10
-    if (cleanHost.startsWith('100.')) {
-      const parts = cleanHost.split('.');
-      const secondOctet = parseInt(parts[1] ?? '0', 10);
-      if (secondOctet >= 64 && secondOctet <= 127) return false;
-    }
-
-    // 0.0.0.0/8 (Windows 上解析为本机)
-    if (cleanHost.startsWith('0.')) return false;
-
-    // localhost
-    if (cleanHost === 'localhost' || cleanHost.startsWith('localhost.')) return false;
-
-    return true;
-  } catch {
-    return false;
-  }
-}
+//
+// isSafeUrl 已提取到 src/main/safety/url-guard.ts（v3.0.1 第五关 SSRF-01），
+// 由 builtin.ts / video-generate.ts 共享，避免重复实现导致规则漂移。
 
 const webFetchTool: ToolDefinition = {
   name: 'web_fetch',

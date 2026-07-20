@@ -161,23 +161,51 @@ export function installPackage(options: InstallOptions): InstallResult {
 
 /**
  * 解析包路径：
- *   - 绝对路径直接用
+ *   - 绝对路径直接用（必须落在 packages/ 下，否则拒绝）
  *   - 相对路径视为 packages/ 下的子目录
+ *
+ * 第五关 AUTH-04：之前允许任意绝对路径，攻击者可让 installPackage 读取
+ * 任意目录（如 C:\Windows\System32\）当作"包"安装，把其中的 .md 文件
+ * 当作人格分片复制到 memory/，导致信息泄露或覆盖用户数据。
+ *
+ * 修复：所有路径（无论绝对还是相对）最终都必须落在 packages/ 目录内，
+ * 并用 realpathSync 解析符号链接防绕过。
  */
 function resolvePackageDir(input: string): string | null {
-  // 防路径遍历
-  if (input.includes('..')) {
+  if (!input || typeof input !== 'string') return null;
+
+  // 防路径遍历：显式拒绝 ..（虽然后面 realpath 会兜底，但早拦截更稳）
+  if (input.includes('..')) return null;
+
+  const packagesDir = path.resolve(process.cwd(), 'packages');
+
+  let candidate: string;
+  if (path.isAbsolute(input)) {
+    candidate = input;
+  } else {
+    // 相对路径：尝试 packages/{input}
+    candidate = path.join(packagesDir, input);
+  }
+
+  // 用 path.resolve 规范化（消去 ./ 之类）
+  const normalized = path.resolve(candidate);
+
+  // 必须落在 packages/ 内
+  const inPackages = normalized === packagesDir ||
+    normalized.startsWith(packagesDir + path.sep);
+  if (!inPackages) return null;
+
+  // 二次校验：解析符号链接后的真实路径也必须在 packages/ 内
+  // 防止用户在 packages/ 下创建符号链接指向任意目录绕过
+  try {
+    const realPath = fs.realpathSync(normalized);
+    const realInPackages = realPath === packagesDir ||
+      realPath.startsWith(packagesDir + path.sep);
+    return realInPackages ? realPath : null;
+  } catch {
+    // 目录不存在时 realpathSync 抛错，返回 null（让上层报"包目录不存在"）
     return null;
   }
-
-  if (path.isAbsolute(input)) {
-    return input;
-  }
-
-  // 相对路径：尝试 packages/{input}
-  const packagesDir = path.resolve(process.cwd(), 'packages');
-  const candidate = path.join(packagesDir, input);
-  return candidate;
 }
 
 // ── 备份逻辑 ──────────────────────────────────────────────────

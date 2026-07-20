@@ -55,9 +55,12 @@ export enum IpcChannel {
 export const agentChatSchema = z.object({
   message: z.string().min(1),
   mode: z.enum(['casual', 'think', 'plan']).default('casual'),
-  sessionId: z.string().optional(),
+  // 安全：sessionId 直接拼接成文件路径（session-store.ts 的 path.join），
+  // 必须严格限制字符集，防止路径遍历（../、绝对路径、特殊字符）写任意路径 JSON 文件
+  sessionId: z.string().regex(/^[a-zA-Z0-9_-]+$/).optional(),
   /** v2.5: 附带的图片 base64 列表（不含 data:image/xxx;base64, 前缀） */
-  images: z.array(z.string()).optional(),
+  // 每个元素必须非空字符串，否则 saveUploadedImage 会写 0 字节文件 + 污染缓存 key
+  images: z.array(z.string().min(1)).optional(),
 });
 export type AgentChatPayload = z.infer<typeof agentChatSchema>;
 
@@ -302,6 +305,40 @@ export const balanceGetResultSchema = z.object({
 });
 export type BalanceGetResultPayload = z.infer<typeof balanceGetResultSchema>;
 
+// ---------- stt:start（渲染层 → main，启动语音识别） ----------
+// 第五关 AUTH-06：之前是 passthrough，渲染层可塞任意字段
+// 这里限定为 STTConfig 的合法子集（Partial），且字段类型严格校验
+export const sttStartSchema = z.object({
+  lang: z.string().regex(/^[a-zA-Z-]+$/).optional(),
+  continuous: z.boolean().optional(),
+  interimResults: z.boolean().optional(),
+  maxDurationMs: z.number().int().min(0).max(600_000).optional(),
+  backend: z.enum(['web-speech', 'openai-whisper', 'whisper-cpp']).optional(),
+}).strict();
+export type SttStartPayload = z.infer<typeof sttStartSchema>;
+
+// ---------- stt:result（渲染层 → main，回传识别结果） ----------
+// 渲染层 web-speech API 返回的识别结果，主进程通过 receiveResult 接收
+export const sttResultSchema = z.object({
+  text: z.string(),
+  isFinal: z.boolean(),
+  confidence: z.number().min(0).max(1),
+  timestamp: z.number(),
+  backend: z.enum(['web-speech', 'openai-whisper', 'whisper-cpp']),
+}).strict();
+export type SttResultPayload = z.infer<typeof sttResultSchema>;
+
+// ---------- vision:analyze（渲染层 → main，请求图像分析） ----------
+// 第五关 AUTH-06：之前是 passthrough，渲染层可塞任意字段
+export const visionAnalyzeSchema = z.object({
+  /** 图片 base64 列表（不含 data:image/xxx;base64, 前缀） */
+  images: z.array(z.string().min(1)).min(1).max(8),
+  prompt: z.string().min(1).max(4000),
+  /** 安全：sessionId 限制字符集防路径遍历 */
+  sessionId: z.string().regex(/^[a-zA-Z0-9_-]+$/).optional(),
+}).strict();
+export type VisionAnalyzePayload = z.infer<typeof visionAnalyzeSchema>;
+
 // ---------- image:upload（渲染层 → main，用户上传图片） ----------
 export const imageUploadSchema = z.object({
   /** base64 编码（不含 data:image/xxx;base64, 前缀） */
@@ -379,15 +416,16 @@ export type ScreenshotRegionCancelPayload = z.infer<typeof screenshotRegionCance
 
 // ---------- video:upload（渲染层 → main，上传视频文件） ----------
 export const videoUploadSchema = z.object({
-  /** 视频文件绝对路径 */
-  filePath: z.string(),
+  /** 视频文件绝对路径（main 进程会再用 isSafeVideoPath 二次校验：扩展名白名单 + realpathSync + 敏感目录黑名单） */
+  filePath: z.string().min(1),
   /** 视频文件名 */
-  fileName: z.string(),
+  fileName: z.string().min(1),
   /** 视频大小（字节） */
-  fileSize: z.number(),
-  sessionId: z.string(),
+  fileSize: z.number().nonnegative(),
+  /** 安全：sessionId 同 agentChatSchema，限制字符集防路径遍历 */
+  sessionId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
   /** 可选的用户提问 */
-  prompt: z.string().optional(),
+  prompt: z.string().max(2000).optional(),
 });
 export type VideoUploadPayload = z.infer<typeof videoUploadSchema>;
 
@@ -436,16 +474,17 @@ export const ipcSchemas = {
   [IpcChannel.STATS_GET]: statsGetSchema,
   [IpcChannel.STATS_GET_CHART]: statsGetChartSchema,
   [IpcChannel.BALANCE_GET]: balanceGetSchema,
-  [IpcChannel.STT_START]: z.object({}).passthrough(),
+  [IpcChannel.STT_START]: sttStartSchema,
   [IpcChannel.STT_STOP]: z.object({}),
-  [IpcChannel.STT_RESULT]: z.object({}).passthrough(),
+  [IpcChannel.STT_RESULT]: sttResultSchema,
   [IpcChannel.EXPORT_CONVERSATION]: z.object({
-    sessionId: z.string(),
+    // 第五关 AUTH-03：sessionId 限制字符集，防 path.join 时被 ../ 拼出任意路径
+    sessionId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
     format: z.enum(['markdown', 'json']),
     includeMetadata: z.boolean().optional(),
   }),
   [IpcChannel.IMAGE_UPLOAD]: imageUploadSchema,
-  [IpcChannel.VISION_ANALYZE]: z.object({}).passthrough(),
+  [IpcChannel.VISION_ANALYZE]: visionAnalyzeSchema,
   [IpcChannel.VISION_RESULT]: visionResultSchema,
   [IpcChannel.SCREENSHOT_REGION_START]: screenshotRegionStartSchema,
   [IpcChannel.SCREENSHOT_REGION_RESULT]: screenshotRegionResultSchema,

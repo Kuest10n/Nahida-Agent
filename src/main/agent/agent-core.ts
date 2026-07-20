@@ -206,6 +206,15 @@ function buildDefaultPersonalityPrompt(_personalityId: string): string {
 /** 每个 session 的对话历史 */
 const sessionHistory = new Map<string, ChatMessage[]>();
 
+/**
+ * 每个 session 的 generateResponse 互斥锁
+ *
+ * 防止同 sessionId 并发调用 generateResponse 导致历史顺序错乱
+ * （A.user → B.user → A.assistant → B.assistant，LLM 上下文断层）
+ * 单线程 JS 下同步代码不会交错，但 await 边界会让两个 async 流交错执行。
+ */
+const sessionLocks = new Map<string, Promise<void>>();
+
 /** 获取 session 历史（不存在则从磁盘加载，仍不存在则创建） */
 function getHistory(sessionId: string): ChatMessage[] {
   let history = sessionHistory.get(sessionId);
@@ -266,6 +275,30 @@ function loadSessionsAndGet(sessionId: string): ChatMessage[] {
  * @returns Agent 回复结果
  */
 export async function generateResponse(
+  sessionId: string,
+  userMessage: string,
+  intent: RouteIntent,
+  degradeDecision: DegradeDecision,
+  onDelta: StreamCallback,
+  router?: Router,
+): Promise<AgentResponse> {
+  // 获取 sessionId 级互斥锁，防止并发调用导致历史顺序错乱
+  // （单线程 JS 下同步代码不会交错，但 await 边界会让两个 async 流交错）
+  const prevLock = sessionLocks.get(sessionId) ?? Promise.resolve();
+  let releaseLock!: () => void;
+  const currentLock = new Promise<void>(resolve => { releaseLock = resolve; });
+  sessionLocks.set(sessionId, currentLock);
+  try {
+    await prevLock;
+    return await generateResponseImpl(sessionId, userMessage, intent, degradeDecision, onDelta, router);
+  } finally {
+    releaseLock();
+    if (sessionLocks.get(sessionId) === currentLock) sessionLocks.delete(sessionId);
+  }
+}
+
+/** generateResponse 的真实实现（已被 sessionId 级互斥锁保护） */
+async function generateResponseImpl(
   sessionId: string,
   userMessage: string,
   intent: RouteIntent,
@@ -515,6 +548,10 @@ export async function generateResponse(
 
     // L3: 即使失败也记录对话时长
     recordConversation(latencyMs);
+
+    // 失败路径也要 appendHistory（user 已在 try 开头写入，这里补 assistant）
+    // 否则 session 历史会"有 user 没 assistant"，下次模型拿到的上下文错位
+    appendHistory(sessionId, { role: 'assistant', content: fallback }, cycleLog);
 
     return {
       content: fallback,

@@ -300,54 +300,58 @@ async function monitorTick(): Promise<void> {
     } else {
       // 截取当前屏幕
       const capture = await captureScreen();
-      if (!capture) return;
+      // 注意：capture 为 null 时不能 return，否则 reschedule 不执行，监控永久停止
+      if (capture) {
+        frameCount++;
+        const { data, width, height, path } = capture;
+        const base64 = data.toString('base64');
 
-      frameCount++;
-      const { data, width, height, path } = capture;
-      const base64 = data.toString('base64');
+        let diffPercent = 0;
+        let exceeded = false;
 
-      let diffPercent = 0;
-      let exceeded = false;
+        // 从截图 NativeImage 提取 64x64 灰度图（用于帧差对比）
+        const nativeImg = nativeImage.createFromBuffer(data);
+        const currentGray = extractGrayFrame(nativeImg);
 
-      // 从截图 NativeImage 提取 64x64 灰度图（用于帧差对比）
-      const nativeImg = nativeImage.createFromBuffer(data);
-      const currentGray = extractGrayFrame(nativeImg);
-
-      // 有上一帧时计算差异
-      if (lastFrameGray) {
-        diffPercent = calculateGrayDiff(lastFrameGray, currentGray);
-        const threshold = currentConfig.threshold ?? DEFAULT_THRESHOLD;
-        exceeded = diffPercent >= threshold;
-      }
-
-      // 更新上一帧数据（只存 4KB 灰度图，不存完整 PNG）
-      lastFrameGray = currentGray;
-
-      // 检测到变化
-      if (exceeded) {
-        changeCount++;
-        console.log(`[Monitor] frame change detected: ${diffPercent.toFixed(2)}% > ${currentConfig.threshold ?? DEFAULT_THRESHOLD}%`);
-
-        // 触发帧差回调
-        if (onFrameDiff) {
-          onFrameDiff({
-            diffPercent,
-            exceeded,
-            imagePath: path,
-            base64,
-            timestamp: Date.now(),
-          });
+        // 有上一帧时计算差异
+        if (lastFrameGray) {
+          diffPercent = calculateGrayDiff(lastFrameGray, currentGray);
+          const threshold = currentConfig.threshold ?? DEFAULT_THRESHOLD;
+          exceeded = diffPercent >= threshold;
         }
+
+        // 更新上一帧数据（只存 4KB 灰度图，不存完整 PNG）
+        lastFrameGray = currentGray;
+
+        // 检测到变化
+        if (exceeded) {
+          changeCount++;
+          console.log(`[Monitor] frame change detected: ${diffPercent.toFixed(2)}% > ${currentConfig.threshold ?? DEFAULT_THRESHOLD}%`);
+
+          // 触发帧差回调
+          if (onFrameDiff) {
+            onFrameDiff({
+              diffPercent,
+              exceeded,
+              imagePath: path,
+              base64,
+              timestamp: Date.now(),
+            });
+          }
+        }
+      } else {
+        console.warn('[Monitor] capture returned null, skipping tick (will retry next interval)');
       }
     }
   } catch (err) {
     console.error('[Monitor] tick error:', err);
-  }
-
-  // 继续下一轮（只在活跃时）
-  if (isActive) {
-    const interval = currentConfig.intervalMs ?? DEFAULT_INTERVAL_MS;
-    timerId = setTimeout(monitorTick, interval);
+  } finally {
+    // 继续下一轮（只在活跃时）
+    // 用 finally 保证：try 内任何 return / throw 都不会跳过 reschedule，避免监控永久停止
+    if (isActive) {
+      const interval = currentConfig.intervalMs ?? DEFAULT_INTERVAL_MS;
+      timerId = setTimeout(monitorTick, interval);
+    }
   }
 }
 

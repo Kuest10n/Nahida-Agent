@@ -47,6 +47,55 @@ export interface ExportResult {
   error?: string;
 }
 
+// ── 安全：导出目录白名单 ─────────────────────────────────────
+
+/**
+ * 允许写入的导出目录（绝对路径前缀）
+ *
+ * 第五关 AUTH-03：exportConversation 的 filePath 若可被外部控制，
+ * 攻击者可写任意路径（如覆盖 memory/SOHA.md、写 .ssh/authorized_keys）。
+ * 即使当前 IPC 入口不接受用户传入 filePath，纵深防御也要在 exportConversation
+ * 内部强制校验：filePath 必须落在白名单目录下。
+ */
+const ALLOWED_EXPORT_DIRS: readonly string[] = [
+  path.resolve(process.cwd(), 'exports'),
+  path.resolve(process.cwd(), 'data', 'exports'), // 备用位置
+];
+
+/**
+ * 校验导出路径是否在白名单目录内
+ *
+ * 防御：
+ *   1. 必须是绝对路径
+ *   2. realpathSync 解析符号链接
+ *   3. 必须落在 ALLOWED_EXPORT_DIRS 之一内
+ *
+ * @returns 校验通过返回真实绝对路径，否则返回 null
+ */
+function safeResolveExportPath(filePath: string): string | null {
+  if (!filePath || typeof filePath !== 'string') return null;
+  if (!path.isAbsolute(filePath)) return null;
+
+  let realPath: string;
+  try {
+    realPath = fs.realpathSync(filePath);
+  } catch {
+    // 文件不存在时 realpathSync 抛错；但导出场景是"写新文件"，
+    // 所以尝试解析父目录的真实路径
+    try {
+      const parentReal = fs.realpathSync(path.dirname(filePath));
+      realPath = path.join(parentReal, path.basename(filePath));
+    } catch {
+      return null;
+    }
+  }
+
+  const allowed = ALLOWED_EXPORT_DIRS.some(dir => {
+    return realPath === dir || realPath.startsWith(dir + path.sep);
+  });
+  return allowed ? realPath : null;
+}
+
 // ── 核心逻辑 ──────────────────────────────────────────────────
 
 /**
@@ -76,10 +125,30 @@ export function exportConversation(options: ExportOptions): ExportResult {
 
     // 写入文件或返回内容
     if (options.filePath) {
-      fs.writeFileSync(options.filePath, content, 'utf-8');
+      // 第五关 AUTH-03：filePath 白名单校验
+      const safePath = safeResolveExportPath(options.filePath);
+      if (!safePath) {
+        return {
+          success: false,
+          messageCount: 0,
+          error: `导出路径不在白名单目录内：${options.filePath}`,
+        };
+      }
+
+      // 确保父目录存在
+      const parentDir = path.dirname(safePath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+
+      // 原子写：.tmp → rename
+      const tmpPath = `${safePath}.tmp`;
+      fs.writeFileSync(tmpPath, content, 'utf-8');
+      fs.renameSync(tmpPath, safePath);
+
       return {
         success: true,
-        filePath: options.filePath,
+        filePath: safePath,
         messageCount: messages.length,
       };
     }

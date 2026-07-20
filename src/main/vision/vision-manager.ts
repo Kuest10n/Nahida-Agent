@@ -574,6 +574,79 @@ export interface VideoAnalysisResult {
   error?: string;
 }
 
+// ── 视频路径安全校验（v3.0.1 第五关 AUTH-02）──────────────────
+//
+// 用户通过 IPC VIDEO_UPLOAD 传入 filePath，理论上应由渲染层 dialog 选定，
+// 但 IPC 入口不能信任渲染层——必须做服务端校验，防止恶意路径直传 ffmpeg 读取敏感文件。
+//
+// 防御点：
+//   1. 必须绝对路径（拒绝相对路径，避免 process.cwd() 漂移导致读到非预期位置）
+//   2. 扩展名白名单（.mp4/.mov/.avi/.mkv/.webm/.flv/.m4v），拒绝 .env/.json/.md 等敏感文件
+//   3. realpathSync 解析符号链接，防止 memory/passwd_link → /etc/passwd 绕过
+//   4. 拒绝项目内敏感目录（.trae/rules、memory/、config/、src/、modelfiles/、scripts/）
+//      避免攻击者把项目内文件当视频读出来再通过 vision 描述回传
+
+/** 视频文件扩展名白名单 */
+const VIDEO_EXTENSIONS = new Set([
+  '.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.m4v', '.wmv',
+]);
+
+/** 项目内禁止读取的敏感子目录（绝对路径前缀匹配） */
+function getSensitiveProjectDirs(): string[] {
+  const cwd = process.cwd();
+  return [
+    path.resolve(cwd, '.trae'),
+    path.resolve(cwd, 'memory'),
+    path.resolve(cwd, 'config'),
+    path.resolve(cwd, 'src'),
+    path.resolve(cwd, 'modelfiles'),
+    path.resolve(cwd, 'scripts'),
+    path.resolve(cwd, '.git'),
+  ];
+}
+
+/**
+ * 校验视频路径是否安全可读
+ *
+ * @returns 校验通过返回解析后的真实绝对路径，否则返回 null
+ */
+export function isSafeVideoPath(filePath: string): string | null {
+  if (!filePath || typeof filePath !== 'string') return null;
+
+  // 1. 必须是绝对路径
+  if (!path.isAbsolute(filePath)) return null;
+
+  // 2. 扩展名白名单（toLowerCase 防止 .MP4 绕过）
+  const ext = path.extname(filePath).toLowerCase();
+  if (!VIDEO_EXTENSIONS.has(ext)) return null;
+
+  // 3. 解析符号链接后的真实路径
+  let realPath: string;
+  try {
+    realPath = fs.realpathSync(filePath);
+  } catch {
+    // 文件不存在或无权限访问
+    return null;
+  }
+
+  // 4. 必须是文件（不是目录）
+  try {
+    const stat = fs.statSync(realPath);
+    if (!stat.isFile()) return null;
+  } catch {
+    return null;
+  }
+
+  // 5. 真实路径不能落在项目内敏感目录
+  const sensitiveDirs = getSensitiveProjectDirs();
+  const inSensitive = sensitiveDirs.some(dir => {
+    return realPath === dir || realPath.startsWith(dir + path.sep);
+  });
+  if (inSensitive) return null;
+
+  return realPath;
+}
+
 /**
  * 视频分析完整流程（v2.12.0）
  *
@@ -734,11 +807,13 @@ export async function processVisionRequest(
 
   // 2. 调用 vision 模型
   let description = '';
+  let visionFailed = false;
   try {
     description = await analyzeImages(validBase64s, prompt, onDelta);
   } catch (err) {
     console.error('[Vision] analyzeImages failed:', err);
     description = `（虚空屏微光一闪）……我的视觉暂时有些模糊，没能看清。错误：${String(err)}`;
+    visionFailed = true; // 标记失败，不写缓存（避免毒化缓存让下次无法重试）
   }
 
   // 3. 可选 OCR（v2.14：用增强版，含置信度 + v2.17 二次识别 + v2.18 语言检测）
@@ -786,7 +861,9 @@ export async function processVisionRequest(
   };
 
   // v2.20：写入缓存（单图时）
-  if (images.length === 1 && visionCache) {
+  // 注意：vision 模型调用失败时不写缓存，否则错误描述会被缓存，
+  // 下次同样的图片+prompt 来时直接返回缓存的错误描述，永远不会重试
+  if (images.length === 1 && visionCache && !visionFailed) {
     const cacheKey = visionCache.computeCacheKey(images[0] ?? '', prompt);
     visionCache.setVisionCache(cacheKey, result);
   }

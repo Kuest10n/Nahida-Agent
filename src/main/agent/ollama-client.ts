@@ -114,7 +114,16 @@ export async function ollamaChatStream(
         const trimmed = line.trim();
         if (!trimmed) continue;
 
-        const chunk: OllamaStreamChunk = JSON.parse(trimmed);
+        // 用 try-catch 包裹 JSON.parse：ollama 进程异常时（OOM/崩溃）可能吐出非 JSON 错误信息，
+        // 单行解析失败不应中断整个流式响应，跳过该行并记录日志即可
+        let chunk: OllamaStreamChunk;
+        try {
+          chunk = JSON.parse(trimmed) as OllamaStreamChunk;
+        } catch (parseErr) {
+          console.warn('[Ollama] NDJSON line parse failed, skipping:', trimmed.slice(0, 200), parseErr);
+          continue;
+        }
+
         const delta = chunk.message?.content ?? '';
         if (delta) {
           fullText += delta;

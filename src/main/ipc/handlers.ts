@@ -1,5 +1,5 @@
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron';
-import { IpcChannel, type AgentChatPayload } from '../../shared/types/ipc';
+import { IpcChannel, type AgentChatPayload, type SttStartPayload, type VisionAnalyzePayload, type VideoUploadPayload } from '../../shared/types/ipc';
 import { registerValidatedHandler } from './validate';
 import { Router, type CommandType } from '../router/router';
 import { ReviewLayer } from '../agent/review-layer';
@@ -26,7 +26,7 @@ import { startSTT, stopSTT, receiveResult, switchBackend, getSTTState, type STTR
 import { startWakeup, stopWakeup, toggleWakeup, getWakeupState } from '../voice/voice-wakeup';
 import { exportConversation, getDefaultExportPath, type ExportFormat } from '../memory/exporter';
 import { appendMessage } from '../memory/session-store';
-import { saveUploadedImage, processVisionRequest, processVideoRequest, startScreenMonitor, stopScreenMonitor, getScreenMonitorState } from '../vision/vision-manager';
+import { saveUploadedImage, processVisionRequest, processVideoRequest, startScreenMonitor, stopScreenMonitor, getScreenMonitorState, isSafeVideoPath } from '../vision/vision-manager';
 import { captureScreen, captureAndAnalyze, captureRegion, listDisplays, formatDisplayList } from '../vision/screenshot';
 import { showRegionOverlay } from '../vision/capture-overlay';
 import { getPomodoroState } from '../tools/pomodoro';
@@ -85,6 +85,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
   // agent:chat —— 收到消息后走路由层 → 真实模型流式推送 → 四审 → live2d action
   registerValidatedHandler(IpcChannel.AGENT_CHAT, async (_event: IpcMainInvokeEvent, payload: AgentChatPayload) => {
     recordInteraction(); // 灵魂三维：记录用户交互（打断梦境）
+    // 顶层 try-catch：任何 await 抛错（模型超时/工具异常/IPC 推送失败）都兜底，
+    // 避免 IPC reject 导致渲染层"界面出错"，同时恢复托盘状态
+    try {
     const sessionId = payload.sessionId ?? 'test-session';
     const message = payload.message;
 
@@ -104,6 +107,9 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
 
     // ── 生成回复：命令走预设，其他意图走真实模型（T5） ──
     let fullOutput: string;
+    // commandOutputPushed: 命令分支内是否已推送完整输出（避免末尾重复推送）
+    // 流式推送（如 /screenshot vision 分析）和一次性推送（如 /monitor status）都应置 true
+    let commandOutputPushed = false;
     // cycleLog：T/F/Tk 三段由 agent-core 内打点，R 段在此追加（审查在 handlers 调用）
     let cycleLog: CycleLogEntry[] = [];
     if (routeResult.intent === 'command') {
@@ -131,8 +137,14 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         }
       } else if (routeResult.command === '/balance') {
         // /balance：查询云端 API 余额（v1.2.x 补丁）
-        const balanceResult = await queryDeepSeekBalance();
-        fullOutput = formatBalanceSummary(balanceResult);
+        // 失败语义：网络超时/API 拒绝时返回友好提示，不让 handler 崩溃
+        try {
+          const balanceResult = await queryDeepSeekBalance();
+          fullOutput = formatBalanceSummary(balanceResult);
+        } catch (err) {
+          console.error('[Command] /balance failed:', err);
+          fullOutput = '（花冠微垂）……余额查询失败了，可能是网络问题，稍后再试吧。';
+        }
       } else if (routeResult.command === '/hat') {
         // /hat：切换六顶帽模式（v1.5 多 Agent 协作）
         const enabled = getCoordinator().toggleHatMode();
@@ -558,29 +570,49 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
               } else if (!sendContent.trim()) {
                 fullOutput = '（花冠微垂）……消息内容不能为空。';
               } else {
-                fullOutput = `（花冠轻转）……正在向群聊「${group.name}」广播消息，请稍候……`;
+                // 事务边界修复：先推送"正在广播"提示（不结束消息），再 await broadcastMessage
+                // 避免先推 finishReason:'stop' 再覆盖 fullOutput 导致重复消息
+                const pendingMsg = `（花冠轻转）……正在向群聊「${group.name}」广播消息，请稍候……`;
                 mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
-                  delta: fullOutput,
+                  delta: pendingMsg,
+                  finishReason: undefined,
+                  sessionId,
+                  timestamp: Date.now(),
+                });
+
+                let replyText: string;
+                try {
+                  const replies = await broadcastMessage(
+                    groupId,
+                    sendContent,
+                    routeResult.degradeDecision,
+                  );
+
+                  if (replies.length === 0) {
+                    replyText = '（花冠微垂）……群聊中没有 AI 成员，无法回复。';
+                  } else {
+                    const replyLines = replies.map(r => {
+                      const limitedTag = r.isTokenLimited ? '（已截断）' : '';
+                      return `\n${r.memberName}${limitedTag}：\n${r.content}`;
+                    });
+                    replyText = `（铃铛轻响，心识印记交错）……群聊回复：${replyLines.join('\n')}`;
+                  }
+                } catch (err) {
+                  console.error('[Command] /group send failed:', err);
+                  replyText = '（花冠微垂）……群聊广播失败，请稍后再试。';
+                }
+
+                // 推送增量回复并结束消息
+                mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+                  delta: `\n${replyText}`,
                   finishReason: 'stop',
                   sessionId,
                   timestamp: Date.now(),
                 });
 
-                const replies = await broadcastMessage(
-                  groupId,
-                  sendContent,
-                  routeResult.degradeDecision,
-                );
-
-                if (replies.length === 0) {
-                  fullOutput = '（花冠微垂）……群聊中没有 AI 成员，无法回复。';
-                } else {
-                  const replyLines = replies.map(r => {
-                    const limitedTag = r.isTokenLimited ? '（已截断）' : '';
-                    return `\n${r.memberName}${limitedTag}：\n${r.content}`;
-                  });
-                  fullOutput = `（铃铛轻响，心识印记交错）……群聊回复：${replyLines.join('\n')}`;
-                }
+                // fullOutput 记录完整消息（供 review/tts/appendMessage 使用）
+                fullOutput = `${pendingMsg}\n${replyText}`;
+                commandOutputPushed = true;
               }
             }
           } else {
@@ -588,6 +620,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
           }
         } else if (routeResult.command === '/screenshot') {
           // /screenshot：屏幕截图 + vision 分析（v2.8.0 视觉感知深度）
+          // 所有子分支都在内部推送输出（一次性或流式），末尾不再重复推送
+          commandOutputPushed = true;
           const trimmed = message.trim();
           const argPart = trimmed.replace('/screenshot', '').trim();
 
@@ -696,6 +730,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
                       audioBase64: ttsResult.audioBase64,
                       voiceType: emotionEnum,
                     });
+                  }).catch((err: unknown) => {
+                    console.error('[TTS] enqueue failed (/screenshot region):', err);
                   });
                 }
               }
@@ -813,11 +849,15 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
                   audioBase64: ttsResult.audioBase64,
                   voiceType: emotionEnum,
                 });
+              }).catch((err: unknown) => {
+                console.error('[TTS] enqueue failed (/screenshot default):', err);
               });
             }
           }
         } else if (routeResult.command === '/monitor') {
           // v2.16: 屏幕实时监控（定时截图 + 帧差检测 + 自动 vision 分析）
+          // 所有子分支都在内部推送输出，末尾不再重复推送
+          commandOutputPushed = true;
           const trimmed = message.trim();
           const argPart = trimmed.replace('/monitor', '').trim();
 
@@ -864,13 +904,15 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         } else {
           fullOutput = COMMAND_RESPONSES[routeResult.command ?? '/help'];
       }
-      // 一次性推送完整回复
-      mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
-        delta: fullOutput,
-        finishReason: 'stop',
-        sessionId,
-        timestamp: Date.now(),
-      });
+      // 一次性推送完整回复（如果命令分支内未已推送）
+      if (!commandOutputPushed) {
+        mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+          delta: fullOutput,
+          finishReason: 'stop',
+          sessionId,
+          timestamp: Date.now(),
+        });
+      }
     } else if (payload.images && payload.images.length > 0) {
       // v2.5: 多模态输入 — 用户附带图片，走 vision 路径
       const visionResult = await processVisionRequest(
@@ -931,6 +973,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
             audioBase64: result.audioBase64,
             voiceType: emotionEnum,
           });
+        }).catch((err: unknown) => {
+          console.error('[TTS] enqueue failed (images):', err);
         });
       }
     } else {
@@ -1058,6 +1102,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
           voiceType: reviewResult.emotion.voiceType,
         });
         console.log('[TTS] pushed chunk, latency:', result.latencyMs, 'ms, cacheHit:', result.cacheHit);
+      }).catch((err: unknown) => {
+        console.error('[TTS] enqueue failed (main):', err);
       });
     }
 
@@ -1079,6 +1125,27 @@ export function setupIpcHandlers(mainWindow: BrowserWindow, live2dWindow: Browse
         latencyMs: reviewResult.latencyMs,
       },
     };
+    } catch (err) {
+      // 兜底：恢复托盘状态 + 推送友好提示 + 返回错误响应
+      console.error('[AGENT_CHAT] handler failed:', err);
+      updateTrayStatus('online');
+      const errSessionId = payload.sessionId ?? 'test-session';
+      try {
+        mainWindow.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+          delta: '（花冠微垂）……心识流转受阻，刚刚那段没能完成，可以再说一次吗？',
+          finishReason: 'stop',
+          sessionId: errSessionId,
+          timestamp: Date.now(),
+        });
+      } catch (sendErr) {
+        console.error('[AGENT_CHAT] fallback send failed:', sendErr);
+      }
+      return {
+        ok: false,
+        echo: payload.message,
+        error: String(err),
+      };
+    }
   });
 
   registerValidatedHandler(IpcChannel.AUTOSTART_SET, (_event: IpcMainInvokeEvent, payload: { enabled: boolean }) => {
@@ -1202,8 +1269,8 @@ ${payload.content}
   });
 
   // v1.8: 语音输入 STT —— 开始识别
-  registerValidatedHandler(IpcChannel.STT_START, async (_event, payload) => {
-    const result = startSTT(typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : undefined);
+  registerValidatedHandler(IpcChannel.STT_START, async (_event, payload: SttStartPayload) => {
+    const result = startSTT(payload);
     return result;
   });
 
@@ -1215,9 +1282,8 @@ ${payload.content}
 
   // v1.8: 语音输入 STT —— 接收识别结果（渲染层 → 主进程）
   registerValidatedHandler(IpcChannel.STT_RESULT, async (_event, payload) => {
-    if (typeof payload === 'object' && payload !== null) {
-      receiveResult(payload as unknown as STTResult);
-    }
+    // payload 已经过 sttResultSchema 严格校验，字段与 STTResult 完全对齐
+    receiveResult(payload as unknown as STTResult);
     return { ok: true };
   });
 
@@ -1242,14 +1308,13 @@ ${payload.content}
   });
 
   // v2.5: Vision 分析
-  registerValidatedHandler(IpcChannel.VISION_ANALYZE, async (event, payload) => {
-    const params = payload as { images: string[]; prompt: string; sessionId?: string };
+  registerValidatedHandler(IpcChannel.VISION_ANALYZE, async (event, payload: VisionAnalyzePayload) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    const sessionId = params.sessionId ?? 'default';
+    const sessionId = payload.sessionId ?? 'default';
 
     const result = await processVisionRequest(
-      params.images,
-      params.prompt,
+      payload.images,
+      payload.prompt,
       (delta: string, done: boolean) => {
         win?.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
           delta,
@@ -1274,22 +1339,42 @@ ${payload.content}
   });
 
   // v2.12: 视频上传 + 分析
-  registerValidatedHandler(IpcChannel.VIDEO_UPLOAD, async (event, payload) => {
-    const params = payload as { filePath: string; fileName: string; fileSize: number; sessionId: string; prompt?: string };
+  registerValidatedHandler(IpcChannel.VIDEO_UPLOAD, async (event, payload: VideoUploadPayload) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    const sessionId = params.sessionId ?? 'default';
-    const prompt = params.prompt?.trim() || '请描述这段视频的主要内容。';
+    const sessionId = payload.sessionId;
+    const prompt = payload.prompt?.trim() || '请描述这段视频的主要内容。';
+
+    // 第五关 AUTH-02：filePath 入口安全校验
+    // 防止渲染层被注入后直传恶意路径（如 ../../memory/SOHA.md）让 ffmpeg 读取并经 vision 描述回传
+    const safePath = isSafeVideoPath(payload.filePath);
+    if (!safePath) {
+      console.error('[VIDEO_UPLOAD] rejected unsafe filePath:', payload.filePath.slice(0, 200));
+      win?.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
+        delta: '（花冠微垂）……这个视频路径不太对劲，没法直接读取哦。请通过附件按钮重新选择视频文件吧。',
+        finishReason: 'stop',
+        sessionId,
+        timestamp: Date.now(),
+      });
+      return {
+        ok: false,
+        description: '视频路径安全校验失败',
+        frameCount: 0,
+        duration: 0,
+        imagePaths: [],
+        error: 'unsafe video path',
+      };
+    }
 
     // 先告诉用户正在处理
     win?.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
-      delta: `（花冠微垂，凝神注视）……我正在看这段视频「${params.fileName}」，稍等片刻哦~`,
+      delta: `（花冠微垂，凝神注视）……我正在看这段视频「${payload.fileName}」，稍等片刻哦~`,
       finishReason: undefined,
       sessionId,
       timestamp: Date.now(),
     });
 
     const result = await processVideoRequest(
-      params.filePath,
+      safePath,
       prompt,
       (delta: string, done: boolean) => {
         win?.webContents.send(IpcChannel.AGENT_MODEL_DELTA, {
@@ -1316,7 +1401,7 @@ ${payload.content}
       });
 
       // 持久化消息
-      appendMessage(sessionId, 'user', `[视频] ${params.fileName}：${prompt}`, undefined, result.imagePaths);
+      appendMessage(sessionId, 'user', `[视频] ${payload.fileName}：${prompt}`, undefined, result.imagePaths);
       appendMessage(sessionId, 'assistant', result.description, undefined);
 
       // Live2D + TTS 联动
@@ -1348,6 +1433,8 @@ ${payload.content}
             audioBase64: ttsResult.audioBase64,
             voiceType: emotionEnum,
           });
+        }).catch((err: unknown) => {
+          console.error('[TTS] enqueue failed (video):', err);
         });
       }
     }

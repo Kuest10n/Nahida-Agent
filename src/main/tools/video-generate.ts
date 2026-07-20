@@ -40,6 +40,7 @@
 import { z } from 'zod';
 import { registerTools, type ToolDefinition, type ToolResult } from './registry';
 import { getConfig } from '../config/config';
+import { isSafeUrl } from '../safety/url-guard';
 import type { VideoConfig } from '../../shared/types/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -440,9 +441,11 @@ async function downloadVideo(
   videoUrl: string,
   backend: BackendName,
 ): Promise<AdapterResult> {
-  // 安全校验：仅允许 HTTPS
-  if (!videoUrl.startsWith('https://')) {
-    return { ok: false, error: `视频 URL 非 HTTPS: ${videoUrl.slice(0, 100)}` };
+  // 第五关 SSRF-01：复用 isSafeUrl 拦截私网/回环/链路本地/CGNAT 等内网地址
+  // 之前仅校验 'https://' 前缀，攻击者若控制后端返回值（如 'https://127.0.0.1/api/leak'）
+  // 可让本进程 fetch 内网资源并写入 videos/ 目录导致信息泄露
+  if (!isSafeUrl(videoUrl)) {
+    return { ok: false, error: `视频 URL 安全校验失败（仅允许公网 HTTPS）: ${videoUrl.slice(0, 100)}` };
   }
 
   try {
