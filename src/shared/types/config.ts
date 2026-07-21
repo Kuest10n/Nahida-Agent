@@ -46,6 +46,8 @@ export type STTBackend = 'web-speech' | 'openai-whisper' | 'whisper-cpp';
 
 /** TTS / GPT-SoVITS / RVC 语音配置 */
 export interface VoiceConfig {
+  /** TTS 是否启用 */
+  ttsEnabled?: boolean;
   ttsAdapter: 'edge-tts' | 'gpt-sovits';
   rvcModelName: string;
   rvcModelVersion: string;

@@ -5,6 +5,8 @@ import { StatusBar } from './StatusBar';
 import { Sidebar } from './Sidebar';
 import { SettingsModal } from './SettingsModal';
 import { FeedbackModal } from './FeedbackModal';
+import { VisionPanel } from './VisionPanel';
+import { TTSPanel } from './TTSPanel';
 import type { Message, ImageAttachment } from './types';
 import { generateMessageId, extractActionTag } from './types';
 import { IpcChannel } from '../../shared/types/ipc';
@@ -83,6 +85,10 @@ export const ChatPanel: React.FC = () => {
   const [config, setConfig] = useState<Config | null>(null);
   // 反馈模态框状态
   const [showFeedback, setShowFeedback] = useState(false);
+  // 视觉面板状态
+  const [showVision, setShowVision] = useState(false);
+  // TTS 面板状态
+  const [showTTS, setShowTTS] = useState(false);
 
   // 监听 Ctrl+Shift+F 快捷键（主进程推送）
   useEffect(() => {
@@ -362,6 +368,31 @@ export const ChatPanel: React.FC = () => {
     }
   }, []);
 
+  // 记忆导出
+  const handleExportMemory = useCallback(async () => {
+    try {
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const filename = `nahida-memory-${timestamp}.json`;
+      await window.nahidaAPI?.invoke(IpcChannel.EXPORT_CONVERSATION, {
+        filename,
+      });
+      setMessages(prev => [...prev, {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: `💾 记忆已导出至 ${filename}`,
+        timestamp: Date.now(),
+      }]);
+    } catch (err) {
+      console.error('[ChatPanel] export memory failed:', err);
+      setMessages(prev => [...prev, {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: '（虚空屏闪烁）导出时出了点问题...',
+        timestamp: Date.now(),
+      }]);
+    }
+  }, []);
+
   return (
     <div style={ROOT_STYLE}>
       {/* 左侧栏 */}
@@ -373,6 +404,9 @@ export const ChatPanel: React.FC = () => {
         onShowStats={handleShowStats}
         onShowBalance={handleShowBalance}
         onOpenSettings={handleOpenSettings}
+        onOpenVision={() => setShowVision(true)}
+        onOpenTTS={() => setShowTTS(true)}
+        onExportMemory={handleExportMemory}
       />
 
       {/* 右侧主区 */}
@@ -409,6 +443,20 @@ export const ChatPanel: React.FC = () => {
       {/* 反馈模态框 */}
       {showFeedback && (
         <FeedbackModal onClose={() => setShowFeedback(false)} />
+      )}
+
+      {/* 视觉感知面板 */}
+      {showVision && (
+        <VisionPanel onClose={() => setShowVision(false)} />
+      )}
+
+      {/* TTS 控制面板 */}
+      {showTTS && (
+        <TTSPanel
+          config={config}
+          onClose={() => setShowTTS(false)}
+          onSaveConfig={handleSaveConfig}
+        />
       )}
     </div>
   );

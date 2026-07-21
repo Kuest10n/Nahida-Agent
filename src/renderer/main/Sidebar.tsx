@@ -8,6 +8,9 @@ interface SidebarProps {
   onShowStats: () => void;
   onShowBalance?: () => void;
   onOpenSettings?: () => void;
+  onOpenVision?: () => void;
+  onOpenTTS?: () => void;
+  onExportMemory?: () => void;
 }
 
 /**
@@ -31,6 +34,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onShowStats,
   onShowBalance,
   onOpenSettings,
+  onOpenVision,
+  onOpenTTS,
+  onExportMemory,
 }) => {
   const [expanded, setExpanded] = useState(false);
 
@@ -157,6 +163,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <span style={{ fontSize: 16 }}>🔧</span>
         {expanded && <span>设置</span>}
+      </button>
+
+      {/* 视觉感知 */}
+      <button
+        style={buttonStyle}
+        onClick={onOpenVision}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#e8f5e9'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+        title="视觉感知"
+      >
+        <span style={{ fontSize: 16 }}>👁️</span>
+        {expanded && <span>视觉</span>}
+      </button>
+
+      {/* TTS 控制 */}
+      <button
+        style={buttonStyle}
+        onClick={onOpenTTS}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#e8f5e9'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+        title="语音控制"
+      >
+        <span style={{ fontSize: 16 }}>🔊</span>
+        {expanded && <span>语音</span>}
+      </button>
+
+      {/* 记忆导出 */}
+      <button
+        style={buttonStyle}
+        onClick={onExportMemory}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = '#e8f5e9'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+        title="记忆导出"
+      >
+        <span style={{ fontSize: 16 }}>💾</span>
+        {expanded && <span>导出</span>}
       </button>
 
       {/* 人格切换 */}
