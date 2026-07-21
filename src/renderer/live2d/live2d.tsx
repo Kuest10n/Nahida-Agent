@@ -12,7 +12,9 @@ const Live2dApp: React.FC = () => {
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const modelUrl = '/models/nahida/Nahida.model3.json';
+    // Electron loadFile() 模式下使用相对路径
+    // Vite dev server 模式下 publicDir assets/ 会被映射到 /models/
+    const modelUrl = './models/nahida/Nahida.model3.json';
 
     initLive2D({
       canvas: canvasRef.current,

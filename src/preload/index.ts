@@ -28,6 +28,8 @@ const INVOKE_CHANNELS = new Set<string>([
   IpcChannel.MONITOR_START,
   IpcChannel.MONITOR_STOP,
   IpcChannel.MONITOR_STATE,
+  // v3.0: Ollama 模型列表
+  IpcChannel.OLLAMA_LIST_MODELS,
 ]);
 
 // 渲染层能监听的通道（main → renderer 单向推）

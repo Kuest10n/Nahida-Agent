@@ -49,6 +49,8 @@ export enum IpcChannel {
   MONITOR_STATE = 'monitor:state',
   /** v2.16: 监控帧差事件推送 */
   MONITOR_FRAME = 'monitor:frame',
+  /** v3.0: Ollama 模型列表 */
+  OLLAMA_LIST_MODELS = 'ollama:list-models',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -508,6 +510,7 @@ export const ipcSchemas = {
     }).optional(),
     timestamp: z.number(),
   }),
+  [IpcChannel.OLLAMA_LIST_MODELS]: z.object({}),
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

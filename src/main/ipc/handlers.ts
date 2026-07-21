@@ -13,6 +13,7 @@ import { updateTrayStatus } from '../tray/tray-manager';
 import { getCurrentPersonality, listPersonalities, setCurrentPersonality, createPersonality, deletePersonality } from '../memory/personality-manager';
 import { getConfig, saveConfigToDisk } from '../config/config';
 import { getTokenStatsSummary, getChartData } from '../agent/token-usage';
+import { listOllamaModels } from '../agent/ollama-client';
 import { queryDeepSeekBalance, formatBalanceSummary } from '../api/balance';
 import { recordInteraction } from '../soul/dream';
 import { getForgettingStats } from '../soul/forgetting';
@@ -1490,6 +1491,12 @@ ${payload.content}
 
   registerValidatedHandler(IpcChannel.MONITOR_STATE, async () => {
     return getScreenMonitorState();
+  });
+
+  // v3.0: Ollama 模型列表
+  registerValidatedHandler(IpcChannel.OLLAMA_LIST_MODELS, async () => {
+    const models = await listOllamaModels();
+    return { ok: true, models };
   });
 }
 

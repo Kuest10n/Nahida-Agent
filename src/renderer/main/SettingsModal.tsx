@@ -21,7 +21,8 @@
  *   - Tab 切换用 useState，不用路由（轻量优先）
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { IpcChannel } from '../../shared/types/ipc';
 import type { Config } from '../../shared/types/config';
 
 interface SettingsModalProps {
@@ -286,6 +287,9 @@ const ModelTab: React.FC<{
   onUpdateModels: (key: keyof Config['models'], value: string) => void;
   onUpdateApi: (key: keyof Config['api'], value: string) => void;
 }> = ({ ollama, models, api, onUpdateOllama, onUpdateModels, onUpdateApi }) => {
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '8px 12px',
@@ -295,12 +299,44 @@ const ModelTab: React.FC<{
     marginTop: 4,
   };
 
+  const selectStyle: React.CSSProperties = {
+    ...inputStyle,
+    appearance: 'auto' as const,
+    backgroundColor: '#fff',
+  };
+
   const labelStyle: React.CSSProperties = {
     display: 'block',
     fontSize: 12,
     color: '#666',
     marginBottom: 4,
   };
+
+  // 自动检测 Ollama 模型列表
+  const handleRefreshModels = useCallback(async () => {
+    setLoadingModels(true);
+    try {
+      const res = await window.nahidaAPI?.invoke(IpcChannel.OLLAMA_LIST_MODELS, {}) as {
+        ok: boolean;
+        models?: string[];
+      } | undefined;
+      if (res?.ok && res.models) {
+        setAvailableModels(res.models);
+      } else {
+        setAvailableModels([]);
+      }
+    } catch (err) {
+      console.error('[Settings] failed to list models:', err);
+      setAvailableModels([]);
+    } finally {
+      setLoadingModels(false);
+    }
+  }, []);
+
+  // 组件挂载时自动检测
+  useEffect(() => {
+    handleRefreshModels();
+  }, [handleRefreshModels]);
 
   return (
     <div>
@@ -333,27 +369,71 @@ const ModelTab: React.FC<{
 
       {/* 模型配置 */}
       <section style={{ marginBottom: 24 }}>
-        <h3 style={{ fontSize: 14, color: '#2e7d32', marginBottom: 12 }}>模型选择</h3>
+        <h3 style={{ fontSize: 14, color: '#2e7d32', marginBottom: 12 }}>
+          模型选择
+          <button
+            onClick={handleRefreshModels}
+            disabled={loadingModels}
+            style={{
+              marginLeft: 8,
+              padding: '2px 8px',
+              fontSize: 11,
+              border: '1px solid #4caf50',
+              borderRadius: 4,
+              backgroundColor: '#fff',
+              color: '#4caf50',
+              cursor: loadingModels ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {loadingModels ? '检测中...' : '🔄 刷新'}
+          </button>
+        </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label style={labelStyle}>本地模型（Ollama）</label>
-            <input
-              type="text"
-              value={models?.local ?? ''}
-              onChange={e => onUpdateModels('local', e.target.value)}
-              style={inputStyle}
-              placeholder="qwen3-8b-nahida"
-            />
+            {availableModels.length > 0 ? (
+              <select
+                value={models?.local ?? ''}
+                onChange={e => onUpdateModels('local', e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">-- 选择模型 --</option>
+                {availableModels.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={models?.local ?? ''}
+                onChange={e => onUpdateModels('local', e.target.value)}
+                style={inputStyle}
+                placeholder={loadingModels ? '检测中...' : 'qwen3-8b-nahida'}
+              />
+            )}
           </div>
           <div>
             <label style={labelStyle}>审查模型</label>
-            <input
-              type="text"
-              value={models?.review ?? ''}
-              onChange={e => onUpdateModels('review', e.target.value)}
-              style={inputStyle}
-              placeholder="qwen2.5-1.5b-review-lora-v3"
-            />
+            {availableModels.length > 0 ? (
+              <select
+                value={models?.review ?? ''}
+                onChange={e => onUpdateModels('review', e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">-- 选择模型 --</option>
+                {availableModels.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={models?.review ?? ''}
+                onChange={e => onUpdateModels('review', e.target.value)}
+                style={inputStyle}
+                placeholder={loadingModels ? '检测中...' : 'qwen2.5-1.5b-review-lora-v3'}
+              />
+            )}
           </div>
           <div>
             <label style={labelStyle}>本地 GGUF 路径（可选）</label>
