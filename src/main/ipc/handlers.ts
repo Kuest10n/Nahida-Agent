@@ -1495,8 +1495,8 @@ ${payload.content}
 
   // v3.0: Ollama 模型列表
   registerValidatedHandler(IpcChannel.OLLAMA_LIST_MODELS, async () => {
-    const models = await listOllamaModels();
-    return { ok: true, models };
+    const result = await listOllamaModels();
+    return result;
   });
 }
 

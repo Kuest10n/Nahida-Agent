@@ -289,6 +289,7 @@ const ModelTab: React.FC<{
 }> = ({ ollama, models, api, onUpdateOllama, onUpdateModels, onUpdateApi }) => {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [ollamaStatus, setOllamaStatus] = useState<'loading' | 'connected' | 'offline' | 'error'>('loading');
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
@@ -315,19 +316,29 @@ const ModelTab: React.FC<{
   // 自动检测 Ollama 模型列表
   const handleRefreshModels = useCallback(async () => {
     setLoadingModels(true);
+    setOllamaStatus('loading');
     try {
       const res = await window.nahidaAPI?.invoke(IpcChannel.OLLAMA_LIST_MODELS, {}) as {
         ok: boolean;
         models?: string[];
+        error?: string;
       } | undefined;
       if (res?.ok && res.models) {
         setAvailableModels(res.models);
+        setOllamaStatus(res.models.length > 0 ? 'connected' : 'offline');
       } else {
         setAvailableModels([]);
+        const errMsg = res?.error ?? '';
+        if (errMsg.includes('ECONNREFUSED') || errMsg.includes('connect ECONN')) {
+          setOllamaStatus('offline');
+        } else {
+          setOllamaStatus('error');
+        }
       }
     } catch (err) {
       console.error('[Settings] failed to list models:', err);
       setAvailableModels([]);
+      setOllamaStatus('offline');
     } finally {
       setLoadingModels(false);
     }
@@ -365,6 +376,33 @@ const ModelTab: React.FC<{
             />
           </div>
         </div>
+        {/* Ollama 连接状态 */}
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor:
+                ollamaStatus === 'connected'
+                  ? '#4caf50'
+                  : ollamaStatus === 'offline'
+                  ? '#ff9800'
+                  : ollamaStatus === 'error'
+                  ? '#f44336'
+                  : '#9e9e9e',
+            }}
+          />
+          <span style={{ fontSize: 12 }}>
+            {ollamaStatus === 'connected'
+              ? `✓ Ollama 已连接（${availableModels.length} 个模型）`
+              : ollamaStatus === 'offline'
+              ? '⚠️ Ollama 服务未启动，请先启动 Ollama'
+              : ollamaStatus === 'error'
+              ? '✗ 连接失败，请检查配置'
+              : '加载中...'}
+          </span>
+        </div>
       </section>
 
       {/* 模型配置 */}
@@ -391,7 +429,20 @@ const ModelTab: React.FC<{
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label style={labelStyle}>本地模型（Ollama）</label>
-            {availableModels.length > 0 ? (
+            {ollamaStatus === 'offline' ? (
+              <div>
+                <input
+                  type="text"
+                  value={models?.local ?? ''}
+                  onChange={e => onUpdateModels('local', e.target.value)}
+                  style={{ ...inputStyle, backgroundColor: '#fafafa', borderColor: '#ddd' }}
+                  placeholder="请先启动 Ollama 服务"
+                />
+                <div style={{ fontSize: 11, color: '#ff9800', marginTop: 4 }}>
+                  ⚠️ Ollama 未连接，请启动 Ollama 后点击刷新按钮
+                </div>
+              </div>
+            ) : availableModels.length > 0 ? (
               <select
                 value={models?.local ?? ''}
                 onChange={e => onUpdateModels('local', e.target.value)}
@@ -414,7 +465,15 @@ const ModelTab: React.FC<{
           </div>
           <div>
             <label style={labelStyle}>审查模型</label>
-            {availableModels.length > 0 ? (
+            {ollamaStatus === 'offline' ? (
+              <input
+                type="text"
+                value={models?.review ?? ''}
+                onChange={e => onUpdateModels('review', e.target.value)}
+                style={{ ...inputStyle, backgroundColor: '#fafafa', borderColor: '#ddd' }}
+                placeholder="请先启动 Ollama 服务"
+              />
+            ) : availableModels.length > 0 ? (
               <select
                 value={models?.review ?? ''}
                 onChange={e => onUpdateModels('review', e.target.value)}

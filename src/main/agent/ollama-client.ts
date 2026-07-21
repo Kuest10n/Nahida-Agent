@@ -164,13 +164,15 @@ export async function checkOllamaAvailable(): Promise<boolean> {
 /**
  * 列出已安装的 ollama 模型
  */
-export async function listOllamaModels(): Promise<string[]> {
+export async function listOllamaModels(): Promise<{ ok: boolean; models: string[]; error?: string }> {
   try {
     const response = await fetch(`${getOllamaBaseUrl()}/api/tags`);
-    if (!response.ok) return [];
+    if (!response.ok) {
+      return { ok: false, models: [], error: `HTTP ${response.status}` };
+    }
     const data = await response.json() as { models?: { name: string }[] };
-    return data.models?.map(m => m.name) ?? [];
-  } catch {
-    return [];
+    return { ok: true, models: data.models?.map(m => m.name) ?? [] };
+  } catch (err) {
+    return { ok: false, models: [], error: err instanceof Error ? err.message : 'unknown error' };
   }
 }
