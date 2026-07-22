@@ -53,7 +53,8 @@ const ALLOWED_MCP_DIRS: readonly string[] = [
   path.resolve(process.cwd(), 'bin'),
 ];
 
-function isValidMcpPath(commandPath: string): boolean {
+/** 导出供测试使用 */
+export function isValidMcpPath(commandPath: string): boolean {
   if (!commandPath || typeof commandPath !== 'string') return false;
 
   let realPath: string;
@@ -68,7 +69,8 @@ function isValidMcpPath(commandPath: string): boolean {
   });
 }
 
-function mcpParamToZod(param: Record<string, unknown>): z.ZodTypeAny {
+/** 导出供测试使用 */
+export function mcpParamToZod(param: Record<string, unknown>): z.ZodTypeAny {
   const type = param.type as string;
   const enumValues = (param.enum as unknown[]) ?? [];
 
@@ -96,7 +98,8 @@ function mcpParamToZod(param: Record<string, unknown>): z.ZodTypeAny {
   }
 }
 
-function mcpToolToSchema(parameters: Record<string, unknown>): z.ZodObject<any> {
+/** 导出供测试使用 */
+export function mcpToolToSchema(parameters: Record<string, unknown>): z.ZodObject<any> {
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [name, param] of Object.entries(parameters)) {
     const zodType = mcpParamToZod(param as Record<string, unknown>);

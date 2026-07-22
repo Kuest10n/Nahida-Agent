@@ -100,7 +100,8 @@ const BLOCKED_MODULES = new Set([
  * 阻止 child_process / cluster / worker_threads 等危险模块。
  * 注意：vm.runInThisContext 不是完美沙箱，但能阻止直接 require 危险模块。
  */
-function validateCommandArgs(args: string[]): boolean {
+/** 导出供测试使用 */
+export function validateCommandArgs(args: string[]): boolean {
   if (!Array.isArray(args)) return false;
   for (const arg of args) {
     if (typeof arg !== 'string') return false;
@@ -111,7 +112,8 @@ function validateCommandArgs(args: string[]): boolean {
   return true;
 }
 
-function validateToolParams(params: Record<string, unknown>): boolean {
+/** 导出供测试使用 */
+export function validateToolParams(params: Record<string, unknown>): boolean {
   if (typeof params !== 'object' || params === null) return false;
   const validateValue = (value: unknown): boolean => {
     if (value === null || value === undefined) return true;
@@ -135,7 +137,8 @@ function validateToolParams(params: Record<string, unknown>): boolean {
   return true;
 }
 
-function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
+/** 导出供测试使用 */
+export function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
   const code = fs.readFileSync(indexPath, 'utf-8');
   const dir = path.dirname(indexPath);
 
