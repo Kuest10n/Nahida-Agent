@@ -10,6 +10,9 @@
  *   - 仅 mock electron 模块的命名导出（desktopCapturer/screen/nativeImage）以让模块在非 Electron 环境加载
  *   - 不 mock 钳位逻辑本身（Math.max/Math.min 真实执行）
  *   - 每个用例立即 stopMonitor() 防止后台 monitorTick 微任务执行真实截图
+ *
+ * v3.0.1 补充：帧差算法测试（S2）
+ *   - calculateGrayDiff 纯函数边界验证
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -32,7 +35,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-import { startMonitor, stopMonitor, getState } from '../main/vision/screen-monitor';
+import { startMonitor, stopMonitor, getState, calculateGrayDiff } from '../main/vision/screen-monitor';
 
 describe('Screen Monitor 资源钳位（VULN-004 修复）', () => {
   afterEach(() => {
@@ -114,5 +117,69 @@ describe('Screen Monitor 资源钳位（VULN-004 修复）', () => {
     expect(state2.config.intervalMs).toBe(2000);
     // state1 是旧配置的快照，不应被第二次调用修改
     expect(state1.config.intervalMs).toBe(1000);
+  });
+});
+
+// ── 帧差算法测试（S2 补测）────────────────────────────────────
+
+describe('calculateGrayDiff - 帧差算法', () => {
+  it('相同帧应返回 0%', () => {
+    const frame = new Uint8Array([100, 100, 100, 100]);
+    expect(calculateGrayDiff(frame, frame)).toBe(0);
+  });
+
+  it('全黑 vs 全白应返回 100%', () => {
+    const black = new Uint8Array([0, 0, 0, 0]);
+    const white = new Uint8Array([255, 255, 255, 255]);
+    expect(calculateGrayDiff(black, white)).toBe(100);
+  });
+
+  it('长度不一致应返回 100%', () => {
+    const short = new Uint8Array([0, 0]);
+    const long = new Uint8Array([0, 0, 0, 0]);
+    expect(calculateGrayDiff(short, long)).toBe(100);
+    expect(calculateGrayDiff(long, short)).toBe(100);
+  });
+
+  it('单像素差异应精确计算', () => {
+    const frame1 = new Uint8Array([0, 0, 0, 0]);
+    const frame2 = new Uint8Array([255, 0, 0, 0]);
+    // 单像素差值 = 255，总最大差值 = 255 * 4 = 1020
+    // 百分比 = 255 / 1020 * 100 = 25%
+    expect(calculateGrayDiff(frame1, frame2)).toBeCloseTo(25, 2);
+  });
+
+  it('半黑半白应返回约 50%', () => {
+    const frame1 = new Uint8Array([0, 0, 0, 0]);
+    const frame2 = new Uint8Array([255, 255, 0, 0]);
+    // 两像素差值 = 255 * 2 = 510，总最大差值 = 255 * 4 = 1020
+    // 百分比 = 510 / 1020 * 100 = 50%
+    expect(calculateGrayDiff(frame1, frame2)).toBeCloseTo(50, 2);
+  });
+
+  it('差异计算应对称（frame1 vs frame2 === frame2 vs frame1）', () => {
+    const frame1 = new Uint8Array([10, 20, 30, 40]);
+    const frame2 = new Uint8Array([40, 30, 20, 10]);
+    expect(calculateGrayDiff(frame1, frame2)).toBe(calculateGrayDiff(frame2, frame1));
+  });
+
+  it('空数组应返回 0%（边界保护，避免 NaN）', () => {
+    const empty = new Uint8Array(0);
+    expect(calculateGrayDiff(empty, empty)).toBe(0);
+    expect(calculateGrayDiff(empty, new Uint8Array([1, 2, 3]))).toBe(0);
+    expect(calculateGrayDiff(new Uint8Array([1, 2, 3]), empty)).toBe(0);
+  });
+
+  it('随机输入结果应在 0-100 范围内', () => {
+    // 生成两个随机 64x64 帧
+    const frame1 = new Uint8Array(64 * 64);
+    const frame2 = new Uint8Array(64 * 64);
+    for (let i = 0; i < 64 * 64; i++) {
+      frame1[i] = Math.floor(Math.random() * 256);
+      frame2[i] = Math.floor(Math.random() * 256);
+    }
+    const diff = calculateGrayDiff(frame1, frame2);
+    expect(diff).toBeGreaterThanOrEqual(0);
+    expect(diff).toBeLessThanOrEqual(100);
   });
 });

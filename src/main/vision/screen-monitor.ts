@@ -133,7 +133,8 @@ const WINDOW_TITLE_CACHE_MS = 5000;
  *   - 从 RGBA 数据计算灰度（BT.601 公式）
  *   - 输出 Uint8Array（64*64 = 4096 字节）
  */
-function extractGrayFrame(nativeImg: Electron.NativeImage): Uint8Array {
+/** 导出供测试使用 */
+export function extractGrayFrame(nativeImg: Electron.NativeImage): Uint8Array {
   const resized = nativeImg.resize({ width: DIFF_SCALE_SIZE, height: DIFF_SCALE_SIZE });
   const bitmap = resized.getBitmap(); // RGBA buffer
   const gray = new Uint8Array(DIFF_SCALE_SIZE * DIFF_SCALE_SIZE);
@@ -156,7 +157,10 @@ function extractGrayFrame(nativeImg: Electron.NativeImage): Uint8Array {
  * @param frame2 第二帧灰度数据（64x64）
  * @returns 差异百分比（0-100）
  */
-function calculateGrayDiff(frame1: Uint8Array, frame2: Uint8Array): number {
+/** 导出供测试使用 */
+export function calculateGrayDiff(frame1: Uint8Array, frame2: Uint8Array): number {
+  // 边界保护：空数组直接返回 0，避免 0/0 = NaN
+  if (frame1.length === 0 || frame2.length === 0) return 0;
   if (frame1.length !== frame2.length) return 100;
 
   let totalDiff = 0;
