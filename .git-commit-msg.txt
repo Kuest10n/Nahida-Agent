@@ -1,21 +1,21 @@
-fix: v0.9.6 Heartjump + Rand_error >50 + isInteractive
+test: cover calculateGrayDiff frame diff algorithm (S2 gap)
 
-1. Heartjump.md 心动机制
-   - 新建 heartjump.ts：4 维度反常检测（情绪/动作/长度/频率）
-   - 触发条件：intensity >= 0.6
-   - 联动：emotion.score 升级 + 触发特殊动作"藤蔓绕腕"
-   - 持久化：写入 memory/heartjump.md
+Add 8 tests for the core screen monitoring frame difference algorithm:
 
-2. Rand_error >50 自动抛出
-   - 新增独立计数器 errorCounts（不受报告后清理影响）
-   - >=50 触发 generateReport + pendingReports 队列
-   - getErrorCounts() 返回真实累计值
+- Same frame returns 0%
+- Full black vs full white returns 100%
+- Mismatched lengths return 100%
+- Single pixel difference precise calculation
+- Half black half white returns ~50%
+- Symmetry verification (a vs b === b vs a)
+- Empty arrays return 0% (NaN bug fix)
+- Random input result in 0-100 range
 
-3. Live2D isInteractive 修复
-   - model.isInteractive = () => true mock
-   - 消除 PixiJS 7.x 兼容报错
+Bug fix: calculateGrayDiff([], []) previously returned NaN due to 0/0.
+Added empty array guard to return 0 directly.
 
-4. 界面美化收尾
-   - Cherry Studio 风格两栏布局（Sidebar + ChatPanel）
-   - 草绿渐变 + 玻璃拟态标题栏
-   - 60px 折叠 / 220px 展开侧边栏
+Source changes:
+- Export calculateGrayDiff and extractGrayFrame from screen-monitor.ts
+- Add empty array boundary protection in calculateGrayDiff
+
+All 17 tests pass (9 clamping + 8 frame diff). Typecheck clean.

@@ -51,6 +51,10 @@ export enum IpcChannel {
   MONITOR_FRAME = 'monitor:frame',
   /** v3.0: Ollama 模型列表 */
   OLLAMA_LIST_MODELS = 'ollama:list-models',
+  /** v3.1: edge-tts 可用声音列表 */
+  TTS_LIST_EDGE_VOICES = 'tts:list-edge-voices',
+  /** v3.1: RVC 模型文件列表（扫描 rvcRoot 目录） */
+  TTS_LIST_RVC_MODELS = 'tts:list-rvc-models',
 }
 
 // ---------- agent:chat（用户发消息 → main） ----------
@@ -511,6 +515,8 @@ export const ipcSchemas = {
     timestamp: z.number(),
   }),
   [IpcChannel.OLLAMA_LIST_MODELS]: z.object({}),
+  [IpcChannel.TTS_LIST_EDGE_VOICES]: z.object({}),
+  [IpcChannel.TTS_LIST_RVC_MODELS]: z.object({}),
 } as const;
 
 export type IpcSchemas = typeof ipcSchemas;

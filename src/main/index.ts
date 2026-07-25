@@ -22,7 +22,7 @@ import { ReviewLayer } from './agent/review-layer';
 import { proactiveQueue } from './agent/proactive-queue';
 import { createTray, destroyTray, updateTrayStatus } from './tray/tray-manager';
 import { initPersonalityManager } from './memory/personality-manager';
-import { emergencyFlush, loadSessions } from './memory/session-store';
+import { emergencyFlush, loadSessions, loadSessionsAsync } from './memory/session-store';
 import { initGroupChat } from './agent/group-chat/group-chat';
 import { healthMonitor, createHttpProbe, createNetworkProbe } from './health/health';
 import { getConfig, getOllamaBaseUrl, loadUserConfigFromDisk } from './config/config';
@@ -124,12 +124,12 @@ function setupHealthMonitor(): void {
   healthMonitor.start();
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 启动时先加载用户配置文件（让设置界面保存的 API Key 等生效）
   loadUserConfigFromDisk();
 
-  // 启动时加载 session（顺便做紧急恢复）
-  loadSessions();
+  // 启动时加载 session（顺便做紧急恢复）—— 改为异步，不阻塞 UI
+  await loadSessionsAsync();
 
   windowMgr.createAll();
 

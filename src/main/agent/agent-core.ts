@@ -16,9 +16,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ollamaChatStream, checkOllamaAvailable, type StreamCallback } from './ollama-client';
 import { sanitizeOutput } from './stream-sanitizer';
-import { loadWorldbook } from '../memory/worldbook';
-import { loadShards, getResidentShards, recallShards, type LoadedShard } from '../memory/shards';
-import { loadSessions, getSessionMessages, appendMessage as persistMessage, clearSession as persistClear } from '../memory/session-store';
+import { loadWorldbook, loadWorldbookAsync } from '../memory/worldbook';
+import { loadShards, loadShardsAsync, getResidentShards, recallShards, type LoadedShard } from '../memory/shards';
+import { loadSessions, loadSessionsAsync, getSessionMessages, appendMessage as persistMessage, clearSession as persistClear } from '../memory/session-store';
 import { getConfig } from '../config/config';
 import { executeToolCall, type RawToolCall } from '../tools/executor';
 import { listToolNames } from '../tools/registry';
@@ -619,12 +619,12 @@ function extractToolCall(text: string): RawToolCall | null {
  * 在应用启动时调用，不阻塞主流程。
  */
 export async function warmupModel(): Promise<void> {
-  // T6: 顺便预加载 worldbook（纯文件 IO，不占 GPU）
-  loadWorldbook();
-  // T6e: 预加载记忆分片（纯文件 IO）
-  loadShards();
-  // T10: 预加载 session 历史（纯文件 IO，懒加载也行，提前加载更顺滑）
-  loadSessions();
+  // T6/T6e/T10: 预加载记忆和 session（改成异步非阻塞）
+  await Promise.all([
+    loadWorldbookAsync(),
+    loadShardsAsync(),
+    loadSessionsAsync(),
+  ]);
 
   // v1.4: 初始化 RAG 系统
   initRAG();

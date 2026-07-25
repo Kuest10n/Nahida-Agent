@@ -32,7 +32,7 @@
 
 import { resolve, join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { getConfig } from '../config/config';
 import type { VoiceConfig } from '../../shared/types/config';
 
@@ -420,5 +420,67 @@ export class RvcBridge implements TtsAdapter {
     // RVC 不支持文本直接合成，需先走 TTS 再转换
     console.log('[RVC] synthesize() 不适用于 RVC（音频→音频），请先用 edge-tts/gpt-sovits 生成音频，再调用 convertVoice()');
     return null;
+  }
+}
+
+// ── 模型列表检测（供设置页下拉用） ────────────────────────────
+
+/**
+ * 列出可用的 RVC 模型文件
+ *
+ * 扫描两个位置：
+ *   1. 项目内置：assets/rvc/*.pth（随项目发布的模型）
+ *   2. RVC WebUI 目录：{rvcRoot}/assets/weights/*.pth（用户自训练的模型）
+ *
+ * 返回去重后的 .pth 文件名列表。
+ */
+export async function listRvcModels(): Promise<{ ok: boolean; models: string[]; error?: string }> {
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('listRvcModels timeout')), 3000)
+    );
+
+    const result = await Promise.race([
+      (async () => {
+        const models = new Set<string>();
+
+        const builtinDir = resolve(process.cwd(), 'assets', 'rvc');
+        if (existsSync(builtinDir)) {
+          const files = readdirSync(builtinDir);
+          for (const f of files) {
+            if (f.endsWith('.pth')) {
+              models.add(f);
+            }
+          }
+        }
+
+        const voiceConfig = readRvcConfig();
+        const rvcRoot = voiceConfig.rvcRoot?.trim() ?? '';
+        if (rvcRoot && existsSync(rvcRoot)) {
+          const weightsDir = join(rvcRoot, 'assets', 'weights');
+          if (existsSync(weightsDir)) {
+            const files = readdirSync(weightsDir);
+            for (const f of files) {
+              if (f.endsWith('.pth')) {
+                models.add(f);
+              }
+            }
+          }
+        }
+
+        return { ok: true, models: [...models].sort() } as const;
+      })(),
+      timeoutPromise,
+    ]);
+
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'listRvcModels timeout') {
+      console.warn('[RVC] listRvcModels timeout');
+      return { ok: false, models: [], error: msg };
+    }
+    console.error('[RVC] listRvcModels failed:', msg);
+    return { ok: false, models: [], error: msg };
   }
 }

@@ -15,6 +15,8 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
+const TIMEOUT_MS = 3000;
+
 // ── 游戏进程名映射 ─────────────────────────────────────────────
 
 /** 已知的游戏进程名（可扩展） */
@@ -157,9 +159,16 @@ export class ProcessScanner {
   /** 列出所有进程（Windows: tasklist） */
   private async listProcesses(): Promise<Array<{ name: string; pid: number }>> {
     try {
-      const { stdout } = await execAsync('chcp 65001 >nul 2>&1 && tasklist /fo csv /nh', {
-        windowsHide: true,
-      });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('tasklist timeout')), TIMEOUT_MS)
+      );
+
+      const { stdout } = await Promise.race([
+        execAsync('chcp 65001 >nul 2>&1 && tasklist /fo csv /nh', {
+          windowsHide: true,
+        }),
+        timeoutPromise,
+      ]);
 
       const lines = stdout.trim().split('\n');
       const processes: Array<{ name: string; pid: number }> = [];
@@ -176,6 +185,10 @@ export class ProcessScanner {
 
       return processes;
     } catch (e) {
+      if (e instanceof Error && e.message === 'tasklist timeout') {
+        console.warn('[Scanner] tasklist timeout, returning empty');
+        return [];
+      }
       if (e instanceof Error && (e as any).stdout) {
         const lines = (e as any).stdout.trim().split('\n');
         const processes: Array<{ name: string; pid: number }> = [];
@@ -190,22 +203,33 @@ export class ProcessScanner {
         }
         return processes;
       }
-      throw e;
+      console.warn('[Scanner] listProcesses failed:', e);
+      return [];
     }
   }
 
   /** 获取进程的窗口标题（Windows: PowerShell Get-Process） */
   private async getWindowTitle(pid: number): Promise<string | undefined> {
     try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('PowerShell timeout')), TIMEOUT_MS)
+      );
+
       const ps = `
         $p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue
         if ($p -and $p.MainWindowTitle) { $p.MainWindowTitle }
       `;
-      const { stdout } = await execAsync(`powershell -Command "${ps}"`, {
-        windowsHide: true,
-      });
+      const { stdout } = await Promise.race([
+        execAsync(`powershell -Command "${ps}"`, {
+          windowsHide: true,
+        }),
+        timeoutPromise,
+      ]);
       return stdout.trim() || undefined;
-    } catch {
+    } catch (e) {
+      if (e instanceof Error && e.message === 'PowerShell timeout') {
+        console.warn('[Scanner] PowerShell timeout for pid', pid);
+      }
       return undefined;
     }
   }

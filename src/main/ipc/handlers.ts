@@ -7,6 +7,8 @@ import { generateResponse, clearSessionHistory, type CycleLogEntry } from '../ag
 import { sanitizeOutput } from '../agent/stream-sanitizer';
 import { resolveActionEmotion, resolveExpression, NahidaEmotion } from '../../shared/types/emotion';
 import { TtsScheduler, GptSoVitsAdapter } from '../tts';
+import { listEdgeTtsVoices } from '../tts/edge-tts-adapter';
+import { listRvcModels } from '../tts/rvc-bridge';
 import { consumePendingReports } from '../agent/rand-error';
 import { setAutoStart, isAutoStartEnabled } from '../tray/autostart';
 import { updateTrayStatus } from '../tray/tray-manager';
@@ -1497,6 +1499,16 @@ ${payload.content}
   registerValidatedHandler(IpcChannel.OLLAMA_LIST_MODELS, async () => {
     const result = await listOllamaModels();
     return result;
+  });
+
+  // v3.1: edge-tts 可用声音列表
+  registerValidatedHandler(IpcChannel.TTS_LIST_EDGE_VOICES, async () => {
+    return await listEdgeTtsVoices();
+  });
+
+  // v3.1: RVC 模型文件列表
+  registerValidatedHandler(IpcChannel.TTS_LIST_RVC_MODELS, async () => {
+    return await listRvcModels();
   });
 }
 

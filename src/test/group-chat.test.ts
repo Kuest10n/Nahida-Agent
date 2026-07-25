@@ -51,7 +51,7 @@ describe('truncateToTokenLimit', () => {
   it('超限时应截断并添加省略号', () => {
     const text = '这是一段很长的文本内容需要被截断处理';
     const result = truncateToTokenLimit(text, 5);
-    expect(result).toHaveLength(6); // 5 字符 + ……
+    expect(result).toHaveLength(7); // 5 字符 + 两个省略号字符（…… 是 2 个 Unicode 字符）
     expect(result.endsWith('……')).toBe(true);
   });
 

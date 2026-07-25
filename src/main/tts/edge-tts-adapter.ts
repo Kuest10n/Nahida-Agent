@@ -11,6 +11,7 @@
 
 import { spawn } from 'node:child_process';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -159,5 +160,69 @@ export class EdgeTtsAdapter implements TtsAdapter {
     } catch {
       // 文件不存在或其他错误，忽略
     }
+  }
+}
+
+// ── 声音列表检测（供设置页下拉用） ────────────────────────────
+
+/**
+ * 列出 edge-tts 可用声音
+ *
+ * 调用 `python -m edge_tts --list-voices`，解析输出提取声音 ShortName。
+ * 默认只返回 zh-CN 开头的声音（纳西妲用中文），如果用户想选其他语言可以后续扩展。
+ */
+export async function listEdgeTtsVoices(): Promise<{ ok: boolean; voices: string[]; error?: string }> {
+  // 先检查 Python 路径是否存在，避免 spawn 卡死
+  if (!existsSync(PYTHON_PATH)) {
+    return { ok: false, voices: [], error: `Python 未找到：${PYTHON_PATH}` };
+  }
+
+  try {
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const proc = spawn(PYTHON_PATH, ['-m', 'edge_tts', '--list-voices'], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      const timer = setTimeout(() => {
+        proc.kill();
+        reject(new Error('edge-tts --list-voices 超时（8s）'));
+      }, 8_000);
+
+      let out = '';
+      let stderr = '';
+      proc.stdout?.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+      proc.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        reject(new Error(`spawn failed: ${err.message}`));
+      });
+
+      proc.on('exit', (code) => {
+        clearTimeout(timer);
+        if (code === 0) {
+          resolve(out);
+        } else {
+          reject(new Error(`edge-tts --list-voices exit ${code}: ${stderr.slice(0, 300)}`));
+        }
+      });
+    });
+
+    // 解析输出：每行第一个字段是 ShortName（格式如 zh-CN-XiaoyiNeural）
+    const voices = stdout
+      .split('\n')
+      .map(line => line.trim().split(/\s+/)[0] ?? '')
+      .filter(name => /^[a-z]{2}-[A-Z]{2}-\w+/.test(name));
+
+    // 中文声音排前面（纳西妲主要用中文）
+    const zhVoices = voices.filter(v => v.startsWith('zh-CN'));
+    const otherVoices = voices.filter(v => !v.startsWith('zh-CN'));
+
+    return { ok: true, voices: [...zhVoices, ...otherVoices] };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[TTS] listEdgeTtsVoices failed:', msg);
+    return { ok: false, voices: [], error: msg };
   }
 }

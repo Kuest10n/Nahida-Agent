@@ -163,16 +163,28 @@ export async function checkOllamaAvailable(): Promise<boolean> {
 
 /**
  * 列出已安装的 ollama 模型
+ *
+ * 带 5 秒超时，避免端口不通时无限等待卡死 UI。
  */
 export async function listOllamaModels(): Promise<{ ok: boolean; models: string[]; error?: string }> {
   try {
-    const response = await fetch(`${getOllamaBaseUrl()}/api/tags`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    const response = await fetch(`${getOllamaBaseUrl()}/api/tags`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
     if (!response.ok) {
       return { ok: false, models: [], error: `HTTP ${response.status}` };
     }
     const data = await response.json() as { models?: { name: string }[] };
     return { ok: true, models: data.models?.map(m => m.name) ?? [] };
   } catch (err) {
-    return { ok: false, models: [], error: err instanceof Error ? err.message : 'unknown error' };
+    const msg = err instanceof Error ? err.message : 'unknown error';
+    // AbortError 通常是超时
+    if (msg.includes('aborted') || msg.includes('abort')) {
+      return { ok: false, models: [], error: '连接超时（5s），请检查 Ollama 是否已启动' };
+    }
+    return { ok: false, models: [], error: msg };
   }
 }

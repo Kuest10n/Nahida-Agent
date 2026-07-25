@@ -133,6 +133,46 @@ export function getResidentShards(): LoadedShard[] {
 }
 
 /**
+ * loadShards 的异步版本（启动时使用，不阻塞主进程）
+ */
+export async function loadShardsAsync(): Promise<void> {
+  if (initialized) return;
+
+  try {
+    const dirExists = await fs.promises.access(MEMORY_DIR).then(() => true).catch(() => false);
+    if (!dirExists) {
+      console.warn(`[Shards] dir not found: ${MEMORY_DIR}`);
+      initialized = true;
+      return;
+    }
+
+    const loadPromises = (Object.keys(SHARD_RESIDENT) as ShardName[]).map(async (name) => {
+      const filePath = path.join(MEMORY_DIR, `${name}.md`);
+      try {
+        await fs.promises.access(filePath);
+        const rawContent = await fs.promises.readFile(filePath, 'utf-8');
+        const content = isEncryptionEnabled() ? safeDecrypt(rawContent.trim(), `${name}.md`) : rawContent.trim();
+        loadedShards.set(name, {
+          name,
+          content: content.trim(),
+          length: content.trim().length,
+        });
+      } catch {
+        console.warn(`[Shards] ${name}.md not found, skipped`);
+      }
+    });
+
+    await Promise.all(loadPromises);
+
+    initialized = true;
+    console.log(`[Shards] loaded ${loadedShards.size} shards (async)`);
+  } catch (err) {
+    console.error('[Shards] load failed:', err);
+    initialized = true;
+  }
+}
+
+/**
  * 按需分片召回规则：分片名 → 关键词正则
  *
  * 命中关键词的分片会被注入 system prompt。

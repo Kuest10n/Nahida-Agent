@@ -194,6 +194,57 @@ export function listLoadedEntries(): WorldbookEntry[] {
   return loadedEntries;
 }
 
+/**
+ * loadWorldbook 的异步版本（启动时使用，不阻塞主进程）
+ */
+export async function loadWorldbookAsync(): Promise<void> {
+  if (initialized) return;
+
+  try {
+    const dirExists = await fs.promises.access(WORLDBOOK_DIR).then(() => true).catch(() => false);
+    if (!dirExists) {
+      console.warn(`[Worldbook] dir not found: ${WORLDBOOK_DIR}`);
+      initialized = true;
+      return;
+    }
+
+    const files = await fs.promises.readdir(WORLDBOOK_DIR);
+    const mdFiles = files.filter(f => f.endsWith('.md'));
+
+    // 并行读取所有文件
+    const loadPromises = mdFiles.map(async (file) => {
+      const fullPath = path.join(WORLDBOOK_DIR, file);
+      const content = await fs.promises.readFile(fullPath, 'utf-8');
+      return parseWorldbookFile(file, content);
+    });
+
+    const results = await Promise.all(loadPromises);
+    const entries = results.filter((e): e is WorldbookEntry => e !== null);
+
+    entries.sort((a, b) => b.priority - a.priority || a.fileName.localeCompare(b.fileName));
+
+    const idx = new Map<string, WorldbookEntry[]>();
+    for (const entry of entries) {
+      for (const trigger of entry.triggers) {
+        const list = idx.get(trigger);
+        if (list) {
+          list.push(entry);
+        } else {
+          idx.set(trigger, [entry]);
+        }
+      }
+    }
+
+    loadedEntries = entries;
+    triggerIndex = idx;
+    initialized = true;
+    console.log(`[Worldbook] loaded ${entries.length} entries from ${files.length} files, ${idx.size} unique triggers (async)`);
+  } catch (err) {
+    console.error('[Worldbook] load failed:', err);
+    initialized = true;
+  }
+}
+
 /** 重置模块状态（测试用，生产环境不应调用） */
 export function resetWorldbook(): void {
   loadedEntries = [];

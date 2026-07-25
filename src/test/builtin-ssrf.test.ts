@@ -5,8 +5,20 @@
  * 链路本地地址等被正确拦截，防止 SSRF 攻击。
  */
 
-import { describe, it, expect } from 'vitest';
-import { getTool, registerBuiltinTools } from '../main/tools/registry';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getTool } from '../main/tools/registry';
+import { registerBuiltinTools } from '../main/tools/builtin';
+import { downloadVideo } from '../main/tools/video-generate';
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    existsSync: () => true,
+    mkdirSync: () => {},
+    writeFileSync: () => {},
+  };
+});
 
 // 注册内置工具
 registerBuiltinTools();
@@ -148,5 +160,103 @@ describe('SSRF 防护 - isSafeUrl 边界用例', () => {
       const result = await testUrl(url);
       expect(result.ok).toBe(false);
     }
+  });
+});
+
+describe('SSRF 防护 - video-generate downloadVideo 集成（S2 补测）', () => {
+  let originalFetch: typeof fetch;
+  let fetchCallCount = 0;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    fetchCallCount = 0;
+
+    const fakeVideoBuffer = new ArrayBuffer(8);
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      fetchCallCount++;
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => fakeVideoBuffer,
+        body: null,
+      } as unknown as Response;
+    });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('downloadVideo 应拒绝 192.168.x.x 内网 URL（SSRF-01 验证）', async () => {
+    const result = await downloadVideo('https://192.168.1.1/api/secret-video', 'volcano');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应拒绝 10.x.x.x 内网 URL', async () => {
+    const result = await downloadVideo('https://10.0.0.1/internal/video', 'runway');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应拒绝 172.16-31.x.x 内网 URL', async () => {
+    const result = await downloadVideo('https://172.16.0.100/video', 'sora');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应拒绝 localhost 回环 URL', async () => {
+    const result = await downloadVideo('https://localhost:8080/secret.mp4', 'volcano');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应拒绝 127.0.0.1 回环 URL', async () => {
+    const result = await downloadVideo('https://127.0.0.1/api/leak', 'runway');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应拒绝 IPv6 回环 [::1]', async () => {
+    const result = await downloadVideo('https://[::1]/video.mp4', 'volcano');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应拒绝链路本地 169.254.x.x（AWS 元数据）', async () => {
+    const result = await downloadVideo('https://169.254.169.254/latest/meta-data/', 'sora');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应拒绝非 HTTPS 协议的 URL', async () => {
+    const result = await downloadVideo('http://example.com/video.mp4', 'volcano');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('安全校验失败');
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it('downloadVideo 应允许合法公网 HTTPS URL（fetch 应被调用）', async () => {
+    const result = await downloadVideo('https://example.com/valid-video.mp4', 'volcano');
+
+    expect(result.ok).toBe(true);
+    expect(result.videoPath).toBeDefined();
+    expect(fetchCallCount).toBe(1);
   });
 });

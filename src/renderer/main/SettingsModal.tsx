@@ -533,6 +533,11 @@ const PerceptionTab: React.FC<{
   voice?: Config['voice'];
   onUpdateVoice: (key: keyof Config['voice'], value: string) => void;
 }> = ({ voice, onUpdateVoice }) => {
+  const [edgeVoices, setEdgeVoices] = useState<string[]>([]);
+  const [loadingVoices, setLoadingVoices] = useState(false);
+  const [rvcModels, setRvcModels] = useState<string[]>([]);
+  const [loadingRvc, setLoadingRvc] = useState(false);
+
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '8px 12px',
@@ -542,11 +547,75 @@ const PerceptionTab: React.FC<{
     marginTop: 4,
   };
 
+  const selectStyle: React.CSSProperties = {
+    ...inputStyle,
+    appearance: 'auto' as const,
+    backgroundColor: '#fff',
+  };
+
   const labelStyle: React.CSSProperties = {
     display: 'block',
     fontSize: 12,
     color: '#666',
     marginBottom: 4,
+  };
+
+  // 自动检测 edge-tts 可用声音
+  const handleRefreshVoices = useCallback(async () => {
+    setLoadingVoices(true);
+    try {
+      const res = await window.nahidaAPI?.invoke(IpcChannel.TTS_LIST_EDGE_VOICES, {}) as {
+        ok: boolean;
+        voices?: string[];
+        error?: string;
+      } | undefined;
+      if (res?.ok && res.voices) {
+        setEdgeVoices(res.voices);
+      } else {
+        setEdgeVoices([]);
+      }
+    } catch (err) {
+      console.error('[Settings] failed to list edge-tts voices:', err);
+      setEdgeVoices([]);
+    } finally {
+      setLoadingVoices(false);
+    }
+  }, []);
+
+  // 自动检测 RVC 可用模型
+  const handleRefreshRvc = useCallback(async () => {
+    setLoadingRvc(true);
+    try {
+      const res = await window.nahidaAPI?.invoke(IpcChannel.TTS_LIST_RVC_MODELS, {}) as {
+        ok: boolean;
+        models?: string[];
+        error?: string;
+      } | undefined;
+      if (res?.ok && res.models) {
+        setRvcModels(res.models);
+      } else {
+        setRvcModels([]);
+      }
+    } catch (err) {
+      console.error('[Settings] failed to list RVC models:', err);
+      setRvcModels([]);
+    } finally {
+      setLoadingRvc(false);
+    }
+  }, []);
+
+  // 不在挂载时自动检测，避免 Python 子进程调用卡死 UI
+  // 用户点"刷新"按钮时才触发检测
+
+  const refreshBtnStyle: React.CSSProperties = {
+    marginLeft: 8,
+    padding: '2px 8px',
+    fontSize: 11,
+    border: '1px solid #4caf50',
+    borderRadius: 4,
+    backgroundColor: '#fff',
+    color: '#4caf50',
+    cursor: 'pointer',
   };
 
   return (
@@ -592,14 +661,37 @@ const PerceptionTab: React.FC<{
 
         {voice?.ttsAdapter === 'edge-tts' && (
           <div>
-            <label style={labelStyle}>edge-tts 声音</label>
-            <input
-              type="text"
-              value={voice?.edgeVoice ?? ''}
-              onChange={e => onUpdateVoice('edgeVoice', e.target.value)}
-              style={inputStyle}
-              placeholder="zh-CN-XiaoyiNeural"
-            />
+            <label style={labelStyle}>
+              edge-tts 声音
+              <button onClick={handleRefreshVoices} disabled={loadingVoices} style={refreshBtnStyle}>
+                {loadingVoices ? '检测中...' : '🔄 刷新'}
+              </button>
+            </label>
+            {edgeVoices.length > 0 ? (
+              <select
+                value={voice?.edgeVoice ?? ''}
+                onChange={e => onUpdateVoice('edgeVoice', e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">-- 选择声音 --</option>
+                {edgeVoices.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={voice?.edgeVoice ?? ''}
+                onChange={e => onUpdateVoice('edgeVoice', e.target.value)}
+                style={inputStyle}
+                placeholder={loadingVoices ? '检测中...' : 'zh-CN-XiaoyiNeural'}
+              />
+            )}
+            {edgeVoices.length === 0 && !loadingVoices && (
+              <div style={{ fontSize: 11, color: '#ff9800', marginTop: 4 }}>
+                ⚠️ 未检测到可用声音，请确认 edge-tts 已安装，或点击刷新重试
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -608,14 +700,37 @@ const PerceptionTab: React.FC<{
         <h3 style={{ fontSize: 14, color: '#2e7d32', marginBottom: 12 }}>RVC 声音转换</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>模型文件名</label>
-            <input
-              type="text"
-              value={voice?.rvcModelName ?? ''}
-              onChange={e => onUpdateVoice('rvcModelName', e.target.value)}
-              style={inputStyle}
-              placeholder="nahida_v0.3_100e.pth"
-            />
+            <label style={labelStyle}>
+              模型文件名
+              <button onClick={handleRefreshRvc} disabled={loadingRvc} style={refreshBtnStyle}>
+                {loadingRvc ? '检测中...' : '🔄 刷新'}
+              </button>
+            </label>
+            {rvcModels.length > 0 ? (
+              <select
+                value={voice?.rvcModelName ?? ''}
+                onChange={e => onUpdateVoice('rvcModelName', e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">-- 选择模型 --</option>
+                {rvcModels.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={voice?.rvcModelName ?? ''}
+                onChange={e => onUpdateVoice('rvcModelName', e.target.value)}
+                style={inputStyle}
+                placeholder={loadingRvc ? '检测中...' : 'nahida_v0.3_100e.pth'}
+              />
+            )}
+            {rvcModels.length === 0 && !loadingRvc && (
+              <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                未检测到模型文件，将 .pth 放入 assets/rvc/ 或 RVC WebUI 的 assets/weights/ 后刷新
+              </div>
+            )}
           </div>
           <div>
             <label style={labelStyle}>RVC WebUI 根目录（外部依赖）</label>

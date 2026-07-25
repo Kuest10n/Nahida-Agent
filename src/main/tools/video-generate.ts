@@ -437,7 +437,7 @@ function extractVideoUrl(data: PollResponse, backend: BackendName): string | nul
 
 // ── 通用：下载视频到本地 ──────────────────────────────────────
 
-async function downloadVideo(
+export async function downloadVideo(
   videoUrl: string,
   backend: BackendName,
 ): Promise<AdapterResult> {

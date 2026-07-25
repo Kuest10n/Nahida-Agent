@@ -137,6 +137,60 @@ export function loadSessions(): void {
   }
 }
 
+/**
+ * loadSessions 的异步版本（启动时使用，不阻塞主进程）
+ */
+export async function loadSessionsAsync(): Promise<void> {
+  if (initialized) return;
+
+  try {
+    // 确保目录存在
+    const dirExists = await fs.promises.access(SESSIONS_DIR).then(() => true).catch(() => false);
+    if (!dirExists) {
+      await fs.promises.mkdir(SESSIONS_DIR, { recursive: true });
+      initialized = true;
+      return;
+    }
+
+    // 先从紧急备份恢复（上次崩了的话）—— 同步执行，紧急恢复优先
+    recoverFromEmergency();
+
+    const now = Date.now();
+    const files = await fs.promises.readdir(SESSIONS_DIR);
+    const jsonFiles = files
+      .filter(f => f.endsWith('.json'))
+      .map(f => path.join(SESSIONS_DIR, f));
+
+    // 读取所有 session 文件（并行）
+    const loadPromises = jsonFiles.map(async (filePath) => {
+      try {
+        const raw = await fs.promises.readFile(filePath, 'utf-8');
+        const session = JSON.parse(raw) as PersistedSession;
+
+        // 过期则删文件，不加载
+        if (now - session.lastActivity > SESSION_TTL_MS) {
+          await fs.promises.unlink(filePath).catch(() => {});
+          return;
+        }
+
+        store.set(session.sessionId, session);
+      } catch {
+        // 损坏的文件直接删
+        await fs.promises.unlink(filePath).catch(() => {});
+      }
+    });
+
+    await Promise.all(loadPromises);
+
+    initialized = true;
+    console.log(`[SessionStore] loaded ${store.size} sessions from disk (async)`);
+    markDirty();
+  } catch (err) {
+    console.error('[SessionStore] load failed:', err);
+    initialized = true;
+  }
+}
+
 // ── 读接口 ────────────────────────────────────────────────────
 
 /**
