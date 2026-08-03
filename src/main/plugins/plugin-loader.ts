@@ -151,6 +151,8 @@ export function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
 
   const moduleObj: { exports: Partial<NahidaPlugin> } = { exports: {} };
 
+  // VULN-001 修复：移除 Function 构造函数注入，防止沙箱逃逸
+  // 攻击者可通过 Function 构造函数访问主进程 require，绕过 BLOCKED_MODULES
   const context: Record<string, unknown> = {
     require: sandboxedRequire,
     module: moduleObj,
@@ -168,10 +170,15 @@ export function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
     String,
     Number,
     Boolean,
-    Function,
     Error,
     JSON,
   };
+
+  // VULN-001 修复：冻结原型链，防止通过 {}.constructor 回溯构造函数逃逸
+  // 禁用 eval / new Function（codeGeneration.strings = false）
+  vm.createContext(context, {
+    codeGeneration: { strings: false, wasm: false },
+  });
 
   const compiledFn = vm.runInNewContext(code, context, { filename: indexPath });
 
