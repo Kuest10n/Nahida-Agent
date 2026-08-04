@@ -223,4 +223,69 @@ describe('loadPluginSandboxed - 沙箱隔离', () => {
       cleanup();
     }
   });
+
+  // ── P0: Function 构造函数逃逸 ──────────────────────────────────
+
+  it('应阻止 Function 构造函数逃逸（VULN-001 P0 修复）', () => {
+    const { indexPath, cleanup } = createTempPlugin(`
+      try {
+        const g = Function('return this')();
+        module.exports.escape = typeof g;
+        module.exports.bypassed = !!g.require;
+      } catch (e) {
+        module.exports.error = e.message || String(e);
+      }
+    `);
+    try {
+      const result = loadPluginSandboxed(indexPath) as Record<string, unknown>;
+      // codeGeneration.strings=false 应使 new Function() 抛出
+      expect(result.escape).toBeUndefined();
+      expect(result.bypassed).toBeUndefined();
+      expect(result.error).toBeDefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('应阻止原型链回溯逃逸（VULN-001 P0 变体）', () => {
+    const { indexPath, cleanup } = createTempPlugin(`
+      try {
+        const g = ({}).constructor.constructor('return this')();
+        module.exports.escape = typeof g;
+        module.exports.bypassed = !!g.require;
+      } catch (e) {
+        module.exports.error = e.message || String(e);
+      }
+    `);
+    try {
+      const result = loadPluginSandboxed(indexPath) as Record<string, unknown>;
+      expect(result.escape).toBeUndefined();
+      expect(result.bypassed).toBeUndefined();
+      expect(result.error).toBeDefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('应阻止原型链污染 require（VULN-001 P1 原型链污染）', () => {
+    const { indexPath, cleanup } = createTempPlugin(`
+      try {
+        // 尝试通过原型链污染覆盖 sandboxedRequire
+        Object.getPrototypeOf({}).require = function(id) { return require(id); };
+        const test = require('child_process');
+        module.exports.bypassed = !!test;
+      } catch (e) {
+        module.exports.error = e.message || String(e);
+      }
+    `);
+    try {
+      const result = loadPluginSandboxed(indexPath) as Record<string, unknown>;
+      // Object.prototype 已被冻结，污染应静默失败（或 throw）
+      // 无论如何 require('child_process') 应被拦截
+      expect(result.bypassed).toBeUndefined();
+      expect(result.error).toBeDefined();
+    } finally {
+      cleanup();
+    }
+  });
 });

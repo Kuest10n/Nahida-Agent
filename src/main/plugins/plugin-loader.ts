@@ -176,6 +176,9 @@ export function loadPluginSandboxed(indexPath: string): Partial<NahidaPlugin> {
 
   // VULN-001 修复：冻结原型链，防止通过 {}.constructor 回溯构造函数逃逸
   // 禁用 eval / new Function（codeGeneration.strings = false）
+  // 额外加固：冻结 Object/Array 原型，防止原型链污染
+  Object.freeze(Object.prototype);
+  Object.freeze(Array.prototype);
   vm.createContext(context, {
     codeGeneration: { strings: false, wasm: false },
   });
